@@ -111,11 +111,23 @@ func TestStatus(t *testing.T) {
 	ctx := New(w, r)
 	ctx.Status(http.StatusCreated)
 
-	if w.Code != http.StatusCreated {
-		t.Errorf("Expected status 201, got %d", w.Code)
-	}
+	// Status() is now lazy - it doesn't write headers immediately
+	// It only sets the internal statusCode
 	if ctx.StatusCode() != http.StatusCreated {
 		t.Errorf("StatusCode() returned %d, expected 201", ctx.StatusCode())
+	}
+
+	// The writer should still have default status until a response is written
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected writer status 200 (default), got %d", w.Code)
+	}
+
+	// Now write a response - it should use the stored status code
+	ctx.String(ctx.StatusCode(), "Created")
+
+	// Now the writer should have the correct status
+	if w.Code != http.StatusCreated {
+		t.Errorf("Expected status 201 after response, got %d", w.Code)
 	}
 }
 

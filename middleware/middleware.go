@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	"github.com/JedizLaPulga/kese"
@@ -121,13 +122,14 @@ func CORSWithConfig(config CORSConfig) kese.MiddlewareFunc {
 
 // RequestID returns a middleware that adds a unique request ID to each request.
 // The ID is set in the X-Request-ID header.
+// Uses atomic operations to safely increment the counter across concurrent requests.
 func RequestID() kese.MiddlewareFunc {
-	var counter uint64 = 0
+	var counter atomic.Uint64
 
 	return func(next kese.HandlerFunc) kese.HandlerFunc {
 		return func(c *context.Context) error {
-			counter++
-			requestID := fmt.Sprintf("%d-%d", time.Now().Unix(), counter)
+			count := counter.Add(1)
+			requestID := fmt.Sprintf("%d-%d", time.Now().Unix(), count)
 			c.SetHeader("X-Request-ID", requestID)
 			return next(c)
 		}

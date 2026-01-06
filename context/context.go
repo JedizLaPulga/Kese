@@ -80,9 +80,9 @@ func (c *Context) SetHeader(key, value string) {
 }
 
 // Status sets the HTTP status code for the response.
+// The status code will be written when a response method is called.
 func (c *Context) Status(code int) {
 	c.statusCode = code
-	c.Writer.WriteHeader(code)
 }
 
 // Body parses the request body as JSON into the provided value.
@@ -102,7 +102,8 @@ func (c *Context) BodyBytes() ([]byte, error) {
 // The data will be marshaled to JSON automatically.
 func (c *Context) JSON(status int, data interface{}) error {
 	c.SetHeader("Content-Type", "application/json")
-	c.Writer.WriteHeader(status)
+	c.statusCode = status
+	c.Writer.WriteHeader(c.statusCode)
 	c.written = true
 
 	encoder := json.NewEncoder(c.Writer)
@@ -113,7 +114,8 @@ func (c *Context) JSON(status int, data interface{}) error {
 // Useful for debugging or human-readable APIs.
 func (c *Context) JSONPretty(status int, data interface{}) error {
 	c.SetHeader("Content-Type", "application/json")
-	c.Writer.WriteHeader(status)
+	c.statusCode = status
+	c.Writer.WriteHeader(c.statusCode)
 	c.written = true
 
 	encoder := json.NewEncoder(c.Writer)
@@ -124,7 +126,8 @@ func (c *Context) JSONPretty(status int, data interface{}) error {
 // String sends a plain text response.
 func (c *Context) String(status int, text string) error {
 	c.SetHeader("Content-Type", "text/plain; charset=utf-8")
-	c.Writer.WriteHeader(status)
+	c.statusCode = status
+	c.Writer.WriteHeader(c.statusCode)
 	c.written = true
 
 	_, err := c.Writer.Write([]byte(text))
@@ -134,7 +137,8 @@ func (c *Context) String(status int, text string) error {
 // HTML sends an HTML response.
 func (c *Context) HTML(status int, html string) error {
 	c.SetHeader("Content-Type", "text/html; charset=utf-8")
-	c.Writer.WriteHeader(status)
+	c.statusCode = status
+	c.Writer.WriteHeader(c.statusCode)
 	c.written = true
 
 	_, err := c.Writer.Write([]byte(html))
@@ -144,7 +148,8 @@ func (c *Context) HTML(status int, html string) error {
 // Bytes sends a raw byte response with the specified content type.
 func (c *Context) Bytes(status int, contentType string, data []byte) error {
 	c.SetHeader("Content-Type", contentType)
-	c.Writer.WriteHeader(status)
+	c.statusCode = status
+	c.Writer.WriteHeader(c.statusCode)
 	c.written = true
 
 	_, err := c.Writer.Write(data)
