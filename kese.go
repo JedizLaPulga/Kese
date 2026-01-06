@@ -98,11 +98,20 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.New(w, r)
 
 	// Find the matching route
-	handler, params := a.router.Match(r.Method, r.URL.Path)
-	if handler == nil {
+	handlerInterface, params := a.router.Match(r.Method, r.URL.Path)
+	if handlerInterface == nil {
 		// No route matched - return 404
 		ctx.Status(http.StatusNotFound)
 		ctx.String(http.StatusNotFound, "404 Not Found")
+		return
+	}
+
+	// Type assert the handler from interface{} to HandlerFunc
+	handler, ok := handlerInterface.(HandlerFunc)
+	if !ok {
+		// This should never happen if we're using the framework correctly
+		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, "Internal Error: invalid handler type")
 		return
 	}
 
@@ -117,6 +126,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx.Status(http.StatusInternalServerError)
 		ctx.String(http.StatusInternalServerError, fmt.Sprintf("Internal Server Error: %v", err))
 	}
+
 }
 
 // Run starts the HTTP server on the specified address.
