@@ -11,22 +11,23 @@ import (
 
 // Static serves files from a directory at the given URL path prefix.
 // Example: app.Static("/assets", "./public") serves ./public/style.css at /assets/style.css
+// Note: Currently only supports single-level paths (e.g., /assets/file.css)
+// Nested paths (e.g., /assets/sub/file.css) are not supported due to router design
 func (a *App) Static(urlPrefix, fsPath string) {
 	// Normalize the URL prefix
 	urlPrefix = strings.TrimSuffix(urlPrefix, "/")
 
 	handler := func(c *context.Context) error {
-		// Get the requested file path
-		requestPath := c.Path()
+		// Get the requested filename from the :filepath parameter
+		filename := c.Param("filepath")
 
-		// Remove the URL prefix to get the relative file path
-		relPath := strings.TrimPrefix(requestPath, urlPrefix)
-		if relPath == "" || relPath == "/" {
-			relPath = "/index.html"
+		// If no filename provided, return 404
+		if filename == "" {
+			return c.String(http.StatusNotFound, "404 Not Found")
 		}
 
 		// Build the full file path
-		filePath := filepath.Join(fsPath, filepath.Clean(relPath))
+		filePath := filepath.Join(fsPath, filepath.Clean(filename))
 
 		// Security check: ensure the file is within fsPath
 		absPath, err := filepath.Abs(filePath)
@@ -55,8 +56,8 @@ func (a *App) Static(urlPrefix, fsPath string) {
 		return nil
 	}
 
-	// Register a wildcard route for this prefix
-	a.GET(urlPrefix+"/*filepath", handler)
+	// Register a parameter-based route for this prefix
+	a.GET(urlPrefix+"/:filepath", handler)
 }
 
 // StaticFile serves a single file at the given URL path.

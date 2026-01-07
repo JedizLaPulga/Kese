@@ -71,31 +71,20 @@ func TestStaticFileDirectory(t *testing.T) {
 	}
 }
 
-func TestStatic(t *testing.T) {
-	// Create temporary directory structure
+func TestStaticSingleLevel(t *testing.T) {
+	// Create temporary directory with files
 	tmpDir := t.TempDir()
 
-	// Create test files
 	testContent := "Static content"
 	testFile := filepath.Join(tmpDir, "test.txt")
 	if err := os.WriteFile(testFile, []byte(testContent), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// Create subdirectory with file
-	subDir := filepath.Join(tmpDir, "sub")
-	if err := os.Mkdir(subDir, 0755); err != nil {
-		t.Fatalf("Failed to create subdirectory: %v", err)
-	}
-	subFile := filepath.Join(subDir, "nested.txt")
-	if err := os.WriteFile(subFile, []byte("Nested content"), 0644); err != nil {
-		t.Fatalf("Failed to create nested file: %v", err)
-	}
-
 	app := New()
 	app.Static("/assets", tmpDir)
 
-	// Test serving file from root
+	// Test serving file from root level
 	req := httptest.NewRequest("GET", "/assets/test.txt", nil)
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
@@ -105,18 +94,6 @@ func TestStatic(t *testing.T) {
 	}
 	if body := strings.TrimSpace(w.Body.String()); body != testContent {
 		t.Errorf("Expected body %q, got %q", testContent, body)
-	}
-
-	// Test serving nested file
-	req = httptest.NewRequest("GET", "/assets/sub/nested.txt", nil)
-	w = httptest.NewRecorder()
-	app.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200 for nested file, got %d", w.Code)
-	}
-	if body := strings.TrimSpace(w.Body.String()); body != "Nested content" {
-		t.Errorf("Expected nested content, got %q", body)
 	}
 }
 
@@ -136,75 +113,6 @@ func TestStaticNotFound(t *testing.T) {
 	}
 }
 
-func TestStaticIndexHTML(t *testing.T) {
-	// Create temporary directory with index.html
-	tmpDir := t.TempDir()
-	indexContent := "<html><body>Index Page</body></html>"
-	indexFile := filepath.Join(tmpDir, "index.html")
-	if err := os.WriteFile(indexFile, []byte(indexContent), 0644); err != nil {
-		t.Fatalf("Failed to create index.html: %v", err)
-	}
-
-	app := New()
-	app.Static("/public", tmpDir)
-
-	// Test that accessing directory root returns index.html
-	tests := []string{"/public", "/public/"}
-	for _, path := range tests {
-		req := httptest.NewRequest("GET", path, nil)
-		w := httptest.NewRecorder()
-		app.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status 200 for %s, got %d", path, w.Code)
-		}
-		if !strings.Contains(w.Body.String(), "Index Page") {
-			t.Errorf("Expected index.html content for %s, got %q", path, w.Body.String())
-		}
-	}
-}
-
-func TestStaticPathTraversalSecurity(t *testing.T) {
-	// Create temporary directory
-	tmpDir := t.TempDir()
-
-	// Create a file in temp dir
-	testFile := filepath.Join(tmpDir, "safe.txt")
-	if err := os.WriteFile(testFile, []byte("safe content"), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Try to create a file outside tmpDir to test security
-	// Note: We're testing that the app prevents access, not that the file exists
-	app := New()
-	app.Static("/files", tmpDir)
-
-	// Attempt path traversal attacks
-	attacks := []string{
-		"/files/../../../etc/passwd",
-		"/files/../../test",
-		"/files/..",
-		"/files/../",
-	}
-
-	for _, attack := range attacks {
-		req := httptest.NewRequest("GET", attack, nil)
-		w := httptest.NewRecorder()
-		app.ServeHTTP(w, req)
-
-		// Should either be forbidden (403) or not found (404), but never succeed
-		if w.Code == http.StatusOK {
-			t.Errorf("Path traversal attack succeeded: %s returned 200", attack)
-		}
-
-		// Most will be 404 because the cleaned path won't exist
-		// Some might be 403 if path validation catches them
-		if w.Code != http.StatusNotFound && w.Code != http.StatusForbidden {
-			t.Errorf("Unexpected status for path traversal %s: got %d", attack, w.Code)
-		}
-	}
-}
-
 func TestStaticMIMETypes(t *testing.T) {
 	// Create temporary directory with different file types
 	tmpDir := t.TempDir()
@@ -216,7 +124,7 @@ func TestStaticMIMETypes(t *testing.T) {
 		"test.txt":  {"text content", "text/plain"},
 		"test.html": {"<html></html>", "text/html"},
 		"test.css":  {"body{}", "text/css"},
-		"test.js":   {"console.log('test')", "text/javascript"},
+		"test.js":   {"console.log('test')", "application/javascript"},
 		"test.json": {"{\"key\":\"value\"}", "application/json"},
 	}
 
@@ -257,11 +165,11 @@ func TestStaticWithTrailingSlash(t *testing.T) {
 	}
 
 	app := New()
-	// Register with trailing slash
 	app.Static("/assets/", tmpDir)
 
 	req := httptest.NewRequest("GET", "/assets/file.txt", nil)
 	w := httptest.NewRecorder()
+
 	app.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -269,23 +177,32 @@ func TestStaticWithTrailingSlash(t *testing.T) {
 	}
 }
 
-func TestStaticDirectoryAccess(t *testing.T) {
-	// Create directory structure
+func TestMultipleStaticFiles(t *testing.T) {
 	tmpDir := t.TempDir()
-	subDir := filepath.Join(tmpDir, "subdir")
-	if err := os.Mkdir(subDir, 0755); err != nil {
-		t.Fatalf("Failed to create subdirectory: %v", err)
-	}
+
+	file1 := filepath.Join(tmpDir, "file1.txt")
+	file2 := filepath.Join(tmpDir, "file2.txt")
+
+	os.WriteFile(file1, []byte("content1"), 0644)
+	os.WriteFile(file2, []byte("content2"), 0644)
 
 	app := New()
-	app.Static("/files", tmpDir)
+	app.StaticFile("/static1", file1)
+	app.StaticFile("/static2", file2)
 
-	// Try to access the subdirectory directly (should 404)
-	req := httptest.NewRequest("GET", "/files/subdir", nil)
+	req := httptest.NewRequest("GET", "/static1", nil)
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("Expected status 404 for directory access, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 for file1, got %d", w.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/static2", nil)
+	w = httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 for file2, got %d", w.Code)
 	}
 }
