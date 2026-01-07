@@ -26,8 +26,8 @@ type Context struct {
 	// statusCode tracks the HTTP status code that was set
 	statusCode int
 
-	// written tracks whether the response has been written
-	written bool
+	// Written tracks whether the response has been written
+	Written bool
 }
 
 // New creates a new Context instance.
@@ -37,7 +37,7 @@ func New(w http.ResponseWriter, r *http.Request) *Context {
 		Writer:     w,
 		params:     make(map[string]string),
 		statusCode: http.StatusOK,
-		written:    false,
+		Written:    false,
 	}
 }
 
@@ -104,7 +104,7 @@ func (c *Context) JSON(status int, data interface{}) error {
 	c.SetHeader("Content-Type", "application/json")
 	c.statusCode = status
 	c.Writer.WriteHeader(c.statusCode)
-	c.written = true
+	c.Written = true
 
 	encoder := json.NewEncoder(c.Writer)
 	return encoder.Encode(data)
@@ -116,7 +116,7 @@ func (c *Context) JSONPretty(status int, data interface{}) error {
 	c.SetHeader("Content-Type", "application/json")
 	c.statusCode = status
 	c.Writer.WriteHeader(c.statusCode)
-	c.written = true
+	c.Written = true
 
 	encoder := json.NewEncoder(c.Writer)
 	encoder.SetIndent("", "  ")
@@ -128,7 +128,7 @@ func (c *Context) String(status int, text string) error {
 	c.SetHeader("Content-Type", "text/plain; charset=utf-8")
 	c.statusCode = status
 	c.Writer.WriteHeader(c.statusCode)
-	c.written = true
+	c.Written = true
 
 	_, err := c.Writer.Write([]byte(text))
 	return err
@@ -139,7 +139,7 @@ func (c *Context) HTML(status int, html string) error {
 	c.SetHeader("Content-Type", "text/html; charset=utf-8")
 	c.statusCode = status
 	c.Writer.WriteHeader(c.statusCode)
-	c.written = true
+	c.Written = true
 
 	_, err := c.Writer.Write([]byte(html))
 	return err
@@ -150,7 +150,7 @@ func (c *Context) Bytes(status int, contentType string, data []byte) error {
 	c.SetHeader("Content-Type", contentType)
 	c.statusCode = status
 	c.Writer.WriteHeader(c.statusCode)
-	c.written = true
+	c.Written = true
 
 	_, err := c.Writer.Write(data)
 	return err
@@ -159,7 +159,7 @@ func (c *Context) Bytes(status int, contentType string, data []byte) error {
 // NoContent sends a 204 No Content response.
 func (c *Context) NoContent() error {
 	c.Writer.WriteHeader(http.StatusNoContent)
-	c.written = true
+	c.Written = true
 	return nil
 }
 
@@ -169,7 +169,7 @@ func (c *Context) Redirect(status int, url string) error {
 		return fmt.Errorf("invalid redirect status code: %d (must be 3xx)", status)
 	}
 	http.Redirect(c.Writer, c.Request, url, status)
-	c.written = true
+	c.Written = true
 	return nil
 }
 
@@ -195,7 +195,7 @@ func (c *Context) Path() string {
 
 // IsWritten returns true if the response has been written.
 func (c *Context) IsWritten() bool {
-	return c.written
+	return c.Written
 }
 
 // StatusCode returns the HTTP status code that was set.

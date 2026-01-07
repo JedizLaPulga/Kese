@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/JedizLaPulga/kese"
 	"github.com/JedizLaPulga/kese/context"
@@ -32,37 +33,40 @@ func main() {
 	app.Use(middleware.CORS())
 	app.Use(middleware.RequestID())
 
-	// Define routes
-	app.GET("/", handleHome)
-	app.GET("/health", handleHealth)
+	// Serve the beautiful landing page at root
+	app.GET("/", serveLandingPage)
 
-	// User routes
-	app.GET("/users", handleGetUsers)
-	app.GET("/users/:id", handleGetUser)
-	app.POST("/users", handleCreateUser)
+	// Serve static files (logo image)
+	app.StaticFile("/img/kese.png", "../../img/kese.png")
+
+	// API routes (prefixed with /api for clarity)
+	app.GET("/api/health", handleHealth)
+	app.GET("/api/users", handleGetUsers)
+	app.GET("/api/users/:id", handleGetUser)
+	app.POST("/api/users", handleCreateUser)
 
 	// Example of error handling
-	app.GET("/panic", handlePanic)
+	app.GET("/api/panic", handlePanic)
 
 	// Start server
 	log.Println("Starting Kese example server...")
+	log.Println("🌐 Navigate to http://localhost:8080 to see the landing page")
 	if err := app.Run(":8080"); err != nil {
 		log.Fatal("Server failed to start:", err)
 	}
 }
 
-// handleHome is the root endpoint
-func handleHome(c *context.Context) error {
-	return c.JSON(200, map[string]interface{}{
-		"message": "Welcome to Kese Framework! 🚀",
-		"version": "0.1.0",
-		"endpoints": map[string]string{
-			"health":      "/health",
-			"users":       "/users",
-			"user by id":  "/users/:id",
-			"create user": "POST /users",
-		},
-	})
+// serveLandingPage serves the beautiful HTML landing page
+func serveLandingPage(c *context.Context) error {
+	htmlContent, err := os.ReadFile("../../templates/welcome.html")
+	if err != nil {
+		// Fallback to simple message if template not found
+		return c.JSON(200, map[string]interface{}{
+			"message": "Welcome to Kese Framework! 🚀",
+			"version": "0.1.0",
+		})
+	}
+	return c.HTML(200, string(htmlContent))
 }
 
 // handleHealth is a health check endpoint
