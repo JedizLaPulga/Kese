@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,11 +44,14 @@ func Recovery() kese.MiddlewareFunc {
 			defer func() {
 				if r := recover(); r != nil {
 					log.Printf("PANIC: %v\n%s", r, debug.Stack())
-					c.Status(500)
-					c.JSON(500, map[string]interface{}{
-						"error": "Internal Server Error",
-						"panic": fmt.Sprintf("%v", r),
-					})
+					// Only write response if nothing has been written yet
+					if !c.IsWritten() {
+						c.Status(500)
+						c.JSON(500, map[string]interface{}{
+							"error": "Internal Server Error",
+							"panic": fmt.Sprintf("%v", r),
+						})
+					}
 				}
 			}()
 
@@ -88,25 +92,11 @@ func CORSWithConfig(config CORSConfig) kese.MiddlewareFunc {
 			}
 
 			if len(config.AllowMethods) > 0 {
-				methods := ""
-				for i, method := range config.AllowMethods {
-					if i > 0 {
-						methods += ", "
-					}
-					methods += method
-				}
-				c.SetHeader("Access-Control-Allow-Methods", methods)
+				c.SetHeader("Access-Control-Allow-Methods", strings.Join(config.AllowMethods, ", "))
 			}
 
 			if len(config.AllowHeaders) > 0 {
-				headers := ""
-				for i, header := range config.AllowHeaders {
-					if i > 0 {
-						headers += ", "
-					}
-					headers += header
-				}
-				c.SetHeader("Access-Control-Allow-Headers", headers)
+				c.SetHeader("Access-Control-Allow-Headers", strings.Join(config.AllowHeaders, ", "))
 			}
 
 			// Handle preflight requests

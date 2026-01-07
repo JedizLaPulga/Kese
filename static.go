@@ -53,7 +53,7 @@ func (a *App) Static(urlPrefix, fsPath string) {
 
 		// Serve the file using http.ServeFile (handles MIME types, caching, etc.)
 		http.ServeFile(c.Writer, c.Request, filePath)
-		c.Written = true
+		c.SetWritten() // Mark as written since http.ServeFile wrote the response
 		return nil
 	}
 
@@ -73,7 +73,7 @@ func (a *App) StaticFile(urlPath, filePath string) {
 
 		// Serve the file
 		http.ServeFile(c.Writer, c.Request, filePath)
-		c.Written = true
+		c.SetWritten() // Mark as written since http.ServeFile wrote the response
 		return nil
 	}
 

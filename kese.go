@@ -101,7 +101,6 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handlerInterface, params := a.router.Match(r.Method, r.URL.Path)
 	if handlerInterface == nil {
 		// No route matched - return 404
-		ctx.Status(http.StatusNotFound)
 		ctx.String(http.StatusNotFound, "404 Not Found")
 		return
 	}
@@ -110,7 +109,6 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler, ok := handlerInterface.(HandlerFunc)
 	if !ok {
 		// This should never happen if we're using the framework correctly
-		ctx.Status(http.StatusInternalServerError)
 		ctx.String(http.StatusInternalServerError, "Internal Error: invalid handler type")
 		return
 	}
@@ -121,10 +119,12 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Execute the handler
 	if err := handler(ctx); err != nil {
 		// Handle errors returned by handlers
-		// For now, we'll just return a 500 error
-		// In the future, we can add custom error handlers
-		ctx.Status(http.StatusInternalServerError)
-		ctx.String(http.StatusInternalServerError, fmt.Sprintf("Internal Server Error: %v", err))
+		// Only write error response if no response has been written yet
+		if !ctx.IsWritten() {
+			ctx.String(http.StatusInternalServerError, fmt.Sprintf("Internal Server Error: %v", err))
+		}
+		// If response was already written, we can't send error info to client
+		// but we could log it here if needed
 	}
 
 }

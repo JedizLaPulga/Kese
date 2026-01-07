@@ -28,6 +28,12 @@ type Context struct {
 
 	// written tracks whether the response has been written
 	written bool
+
+	// bodyBytes stores the buffered request body for multiple reads
+	bodyBytes []byte
+
+	// bodyRead tracks whether the body has been read and buffered
+	bodyRead bool
 }
 
 // New creates a new Context instance.
@@ -38,6 +44,8 @@ func New(w http.ResponseWriter, r *http.Request) *Context {
 		params:     make(map[string]string),
 		statusCode: http.StatusOK,
 		written:    false,
+		bodyBytes:  nil,
+		bodyRead:   false,
 	}
 }
 
@@ -60,12 +68,14 @@ func (c *Context) Query(key string) string {
 }
 
 // QueryDefault returns the value of a URL query parameter with a default fallback.
+// Returns the default value only if the parameter is not present in the URL.
+// An empty string value ("?q=") will return empty string, not the default.
 func (c *Context) QueryDefault(key, defaultValue string) string {
-	value := c.Query(key)
-	if value == "" {
+	values := c.Request.URL.Query()
+	if !values.Has(key) {
 		return defaultValue
 	}
-	return value
+	return values.Get(key)
 }
 
 // Header returns the value of a request header.
@@ -87,15 +97,44 @@ func (c *Context) Status(code int) {
 
 // Body parses the request body as JSON into the provided value.
 // The value should be a pointer to a struct.
+// Limited to 10MB to prevent memory exhaustion attacks.
+// The body is buffered on first read, so this method can be called multiple times.
 func (c *Context) Body(v interface{}) error {
-	defer c.Request.Body.Close()
-	return json.NewDecoder(c.Request.Body).Decode(v)
+	// Read and buffer the body if not already done
+	if !c.bodyRead {
+		defer c.Request.Body.Close()
+		// Limit to 10MB to prevent memory exhaustion
+		limitedReader := io.LimitReader(c.Request.Body, 10<<20) // 10 MB
+		data, err := io.ReadAll(limitedReader)
+		if err != nil {
+			return err
+		}
+		c.bodyBytes = data
+		c.bodyRead = true
+	}
+
+	// Parse JSON from buffered bytes
+	return json.Unmarshal(c.bodyBytes, v)
 }
 
 // BodyBytes reads the raw request body as bytes.
+// Limited to 10MB to prevent memory exhaustion attacks.
+// The body is buffered on first read, so this method can be called multiple times.
 func (c *Context) BodyBytes() ([]byte, error) {
-	defer c.Request.Body.Close()
-	return io.ReadAll(c.Request.Body)
+	// Read and buffer the body if not already done
+	if !c.bodyRead {
+		defer c.Request.Body.Close()
+		// Limit to 10MB to prevent memory exhaustion
+		limitedReader := io.LimitReader(c.Request.Body, 10<<20) // 10 MB
+		data, err := io.ReadAll(limitedReader)
+		if err != nil {
+			return nil, err
+		}
+		c.bodyBytes = data
+		c.bodyRead = true
+	}
+
+	return c.bodyBytes, nil
 }
 
 // JSON sends a JSON response with the specified status code.
@@ -202,4 +241,10 @@ func (c *Context) IsWritten() bool {
 // StatusCode returns the HTTP status code that was set.
 func (c *Context) StatusCode() int {
 	return c.statusCode
+}
+
+// SetWritten marks the response as written.
+// This is used internally by static file serving and other methods that write directly.
+func (c *Context) SetWritten() {
+	c.written = true
 }
