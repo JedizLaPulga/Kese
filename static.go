@@ -40,7 +40,8 @@ func (a *App) Static(urlPrefix, fsPath string) {
 			return c.String(http.StatusInternalServerError, "Internal Server Error")
 		}
 
-		if !strings.HasPrefix(absPath, absFsPath) {
+		if !strings.HasPrefix(absPath+string(filepath.Separator), absFsPath+string(filepath.Separator)) &&
+			absPath != absFsPath {
 			return c.String(http.StatusForbidden, "Forbidden")
 		}
 
