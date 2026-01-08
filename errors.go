@@ -10,6 +10,8 @@ import (
 type ErrorHandler func(err error) (int, interface{})
 
 // DefaultErrorHandler is the default error handler that returns appropriate status codes.
+// It does not expose internal error details to clients for security reasons.
+// The actual error is logged by the framework in kese.go ServeHTTP.
 func DefaultErrorHandler(err error) (int, interface{}) {
 	// Check for common error types
 	var validationErr *ValidationError
@@ -21,8 +23,9 @@ func DefaultErrorHandler(err error) (int, interface{}) {
 	}
 
 	// Default to 500 Internal Server Error
+	// Don't expose internal error details to clients in production
 	return 500, map[string]string{
-		"error": fmt.Sprintf("Internal Server Error: %v", err),
+		"error": "Internal Server Error",
 	}
 }
 

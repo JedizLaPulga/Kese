@@ -10,6 +10,9 @@ import (
 	"github.com/JedizLaPulga/kese/router"
 )
 
+// DefaultMaxBodySize is the default maximum size for request bodies (10MB)
+const DefaultMaxBodySize = 10 << 20 // 10MB
+
 // HandlerFunc defines the function signature for route handlers.
 // It receives a Context and returns an error for centralized error handling.
 type HandlerFunc func(*context.Context) error
@@ -41,7 +44,7 @@ func New() *App {
 		errorHandler: DefaultErrorHandler,
 		healthCheck:  health.New(),
 		Logger:       logger.New(),
-		MaxBodySize:  10 << 20, // 10MB Default
+		MaxBodySize:  DefaultMaxBodySize,
 	}
 }
 

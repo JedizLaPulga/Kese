@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"log"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -10,11 +9,13 @@ import (
 
 	"github.com/JedizLaPulga/kese"
 	"github.com/JedizLaPulga/kese/context"
+	"github.com/JedizLaPulga/kese/logger"
 )
 
-// Logger returns a middleware that logs HTTP requests.
-// It logs the method, path, and response time for each request.
-func Logger() kese.MiddlewareFunc {
+// Logger returns a middleware that logs HTTP requests using structured logging.
+// It logs the method, path, status code, and response time for each request.
+// Accepts a logger instance to ensure consistent structured logging across the application.
+func Logger(logger *logger.Logger) kese.MiddlewareFunc {
 	return func(next kese.HandlerFunc) kese.HandlerFunc {
 		return func(c *context.Context) error {
 			start := time.Now()
@@ -22,13 +23,13 @@ func Logger() kese.MiddlewareFunc {
 			// Call the next handler
 			err := next(c)
 
-			// Log after handler completes
+			// Log after handler completes using structured logging
 			duration := time.Since(start)
-			log.Printf("[%s] %s - %d - %v",
-				c.Method(),
-				c.Path(),
-				c.StatusCode(),
-				duration,
+			logger.Info("Request completed",
+				"method", c.Method(),
+				"path", c.Path(),
+				"status", c.StatusCode(),
+				"duration_ms", duration.Milliseconds(),
 			)
 
 			return err
@@ -36,19 +37,23 @@ func Logger() kese.MiddlewareFunc {
 	}
 }
 
-// Recovery returns a middleware that recovers from panics.
+// Recovery returns a middleware that recovers from panics using structured logging.
 // It prevents the server from crashing and returns a 500 error.
-func Recovery() kese.MiddlewareFunc {
+// Accepts a logger instance to ensure panic details are logged with proper structure.
+func Recovery(logger *logger.Logger) kese.MiddlewareFunc {
 	return func(next kese.HandlerFunc) kese.HandlerFunc {
 		return func(c *context.Context) error {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("PANIC: %v\n%s", r, debug.Stack())
+					// Log panic with structured logging
+					logger.Error("Panic recovered",
+						"panic", fmt.Sprintf("%v", r),
+						"stack", string(debug.Stack()),
+					)
 					// Only write response if nothing has been written yet
 					if !c.IsWritten() {
 						c.JSON(500, map[string]interface{}{
 							"error": "Internal Server Error",
-							"panic": fmt.Sprintf("%v", r),
 						})
 					}
 				}
@@ -77,16 +82,25 @@ type CORSConfig struct {
 }
 
 // CORSWithConfig returns a CORS middleware with custom configuration.
+// Properly handles multiple allowed origins by checking the request origin.
 func CORSWithConfig(config CORSConfig) kese.MiddlewareFunc {
 	return func(next kese.HandlerFunc) kese.HandlerFunc {
 		return func(c *context.Context) error {
-			// Set CORS headers
+			// Set CORS headers based on configuration
 			if len(config.AllowOrigins) > 0 {
-				origin := config.AllowOrigins[0]
-				if origin == "*" {
+				// Check if wildcard is allowed
+				if len(config.AllowOrigins) == 1 && config.AllowOrigins[0] == "*" {
 					c.SetHeader("Access-Control-Allow-Origin", "*")
 				} else {
-					c.SetHeader("Access-Control-Allow-Origin", origin)
+					// Match request origin against allowed origins
+					requestOrigin := c.Header("Origin")
+					for _, allowedOrigin := range config.AllowOrigins {
+						if allowedOrigin == requestOrigin {
+							c.SetHeader("Access-Control-Allow-Origin", requestOrigin)
+							c.SetHeader("Access-Control-Allow-Credentials", "true")
+							break
+						}
+					}
 				}
 			}
 
