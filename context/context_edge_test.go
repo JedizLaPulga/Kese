@@ -141,3 +141,31 @@ func TestQueryDefaultWithEmptyValue(t *testing.T) {
 		t.Errorf("Expected 'test', got %q", result3)
 	}
 }
+
+// TestMaxBodySize verifies that reading body larger than limit fails
+func TestMaxBodySize(t *testing.T) {
+	body := "This body is definitely longer than 5 bytes"
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+
+	// Set limit to 5 bytes
+	limit := int64(5)
+	ctx := New(w, r, limit)
+
+	// Try to read body
+	data, err := ctx.BodyBytes()
+	if err == nil {
+		t.Fatal("Expected error when reading body larger than limit")
+	}
+
+	// Verify error message (optional, but good for debugging)
+	// http.MaxBytesReader returns "http: request body too large"
+	if err.Error() != "http: request body too large" {
+		t.Errorf("Expected 'http: request body too large', got %v", err)
+	}
+
+	// Verify we can't read more
+	if len(data) > int(limit) {
+		t.Errorf("Read more bytes than limit: %d > %d", len(data), limit)
+	}
+}
