@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+
+	"github.com/JedizLaPulga/kese/sanitize"
 )
 
 // Context wraps http.Request and http.ResponseWriter to provide
@@ -254,6 +256,15 @@ func (c *Context) SetWritten() {
 	c.written = true
 }
 
+// CSRFToken returns the CSRF token from context.
+// Used in templates and handlers to access the current CSRF token.
+func (c *Context) CSRFToken() string {
+	if token := c.Get("csrf_token"); token != nil {
+		return token.(string)
+	}
+	return ""
+}
+
 // Set stores a key-value pair in the context.
 // This is useful for passing data between middleware and handlers.
 // Example: c.Set("user", authenticatedUser)
@@ -378,4 +389,21 @@ func (c *Context) SaveUploadedFile(formKey, dst string) error {
 
 	_, err = io.Copy(out, file)
 	return err
+}
+
+// Sanitization helper methods
+
+// SanitizeHTML escapes HTML to prevent XSS attacks.
+func (c *Context) SanitizeHTML(input string) string {
+	return sanitize.HTML(input)
+}
+
+// IsEmail validates if the input is a valid email.
+func (c *Context) IsEmail(email string) bool {
+	return sanitize.IsEmail(email)
+}
+
+// IsURL validates if the input is a valid URL.
+func (c *Context) IsURL(urlStr string) bool {
+	return sanitize.IsURL(urlStr)
 }
