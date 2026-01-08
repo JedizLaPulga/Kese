@@ -2,9 +2,6 @@ package middleware
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -115,13 +112,4 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 
 func (r *responseRecorder) Write(b []byte) (int, error) {
 	return r.body.Write(b)
-}
-
-// generateCacheKey creates a cache key from request.
-func generateCacheKey(method, path, query string) string {
-	h := sha256.New()
-	io.WriteString(h, method)
-	io.WriteString(h, path)
-	io.WriteString(h, query)
-	return fmt.Sprintf("%x", h.Sum(nil))
 }
