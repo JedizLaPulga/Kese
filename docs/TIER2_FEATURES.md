@@ -212,8 +212,9 @@ app.Use(middleware.CacheWithConfig(middleware.CacheConfig{
 
 ### Graceful Shutdown
 
-Handle shutdown signals properly.
+Properly handle shutdown signals for zero-downtime deployments.
 
+**Basic Usage**:
 ```go
 // Instead of app.Run()
 app.RunWithShutdown(":8080", 10*time.Second)
