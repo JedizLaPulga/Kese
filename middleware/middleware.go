@@ -46,7 +46,6 @@ func Recovery() kese.MiddlewareFunc {
 					log.Printf("PANIC: %v\n%s", r, debug.Stack())
 					// Only write response if nothing has been written yet
 					if !c.IsWritten() {
-						c.Status(500)
 						c.JSON(500, map[string]interface{}{
 							"error": "Internal Server Error",
 							"panic": fmt.Sprintf("%v", r),

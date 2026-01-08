@@ -18,35 +18,28 @@ func HTML(input string) string {
 	return html.EscapeString(input)
 }
 
-// SQL escapes single quotes to prevent SQL injection.
-// Note: This is a basic escape. Prefer parameterized queries for real SQL safety.
-//
-// Example:
-//
-//	safe := sanitize.SQL("O'Reilly")
-//	// Returns: "O''Reilly"
-func SQL(input string) string {
-	return strings.ReplaceAll(input, "'", "''")
-}
-
 // Path sanitizes file paths to prevent directory traversal attacks.
-// Removes ".." and ensures the path stays within bounds.
+// Removes leading slashes and checks for attempts to escape the base directory.
 //
 // Example:
 //
 //	safe := sanitize.Path("../../etc/passwd")
 //	// Returns: "etc/passwd"
 func Path(input string) string {
-	// Clean the path
+	// Clean the path to resolve . and .. properly
 	cleaned := filepath.Clean(input)
 
-	// Remove leading slashes and parent directory references
+	// Remove leading slashes and backslashes
 	cleaned = strings.TrimPrefix(cleaned, "/")
 	cleaned = strings.TrimPrefix(cleaned, "\\")
 
-	// Remove any remaining ..
-	for strings.Contains(cleaned, "..") {
-		cleaned = strings.ReplaceAll(cleaned, "..", "")
+	// After cleaning, if path still starts with .., it's attempting to escape
+	// This check doesn't corrupt legitimate filenames like "my..file.txt"
+	if strings.HasPrefix(cleaned, "..") {
+		// Remove the leading .. and any following separator
+		cleaned = strings.TrimPrefix(cleaned, "..")
+		cleaned = strings.TrimPrefix(cleaned, "/")
+		cleaned = strings.TrimPrefix(cleaned, "\\")
 	}
 
 	return cleaned

@@ -62,13 +62,3 @@ func (a *App) RunWithShutdown(address string, timeout time.Duration) error {
 		return nil
 	}
 }
-
-// Shutdown gracefully shuts down the server without interrupting active connections.
-// It first closes all open listeners, then waits for connections to return to idle,
-// and then shuts down within the context deadline.
-//
-// This method is useful when you want to programmatically shutdown the server
-// rather than waiting for OS signals.
-func (a *App) Shutdown(ctx context.Context, server *http.Server) error {
-	return server.Shutdown(ctx)
-}

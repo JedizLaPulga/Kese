@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
+	"strings"
 
 	"github.com/JedizLaPulga/kese"
 	"github.com/JedizLaPulga/kese/context"
@@ -128,17 +129,13 @@ func generateToken(length int) (string, error) {
 
 // extractCSRFToken extracts CSRF token from request.
 func extractCSRFToken(c *context.Context, lookup string) string {
-	// Parse lookup format
-	if len(lookup) < 6 {
-		return ""
+	// Parse lookup format using safe string operations
+	if strings.HasPrefix(lookup, "form:") {
+		return c.FormValue(strings.TrimPrefix(lookup, "form:"))
 	}
 
-	if lookup[:5] == "form:" {
-		return c.FormValue(lookup[5:])
-	}
-
-	if lookup[:7] == "header:" {
-		return c.Header(lookup[7:])
+	if strings.HasPrefix(lookup, "header:") {
+		return c.Header(strings.TrimPrefix(lookup, "header:"))
 	}
 
 	return ""

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 
@@ -362,14 +363,9 @@ func (c *Context) MultipartForm() (*http.Request, error) {
 // File upload methods
 
 // FormFile returns the first file for the provided form key.
-// Returns the file, file header, and any error encountered.
-func (c *Context) FormFile(key string) (file io.ReadCloser, header *http.Request, err error) {
-	f, _, err := c.Request.FormFile(key)
-	if err != nil {
-		return nil, nil, err
-	}
-	// Return the file and the whole request so caller can access h.Filename, h.Size, etc.
-	return f, c.Request, nil
+// Returns the file, file header (with Filename, Size, etc.), and any error encountered.
+func (c *Context) FormFile(key string) (multipart.File, *multipart.FileHeader, error) {
+	return c.Request.FormFile(key)
 }
 
 // SaveUploadedFile saves an uploaded file to the specified destination path.

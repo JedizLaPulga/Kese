@@ -1,6 +1,7 @@
 package health
 
 import (
+	"encoding/json"
 	"net/http"
 	"sync"
 )
@@ -87,25 +88,12 @@ func (h *HealthChecker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
-	// Simple JSON response without importing encoding/json
-	w.Write([]byte(`{"status":"`))
-	w.Write([]byte(status))
-	w.Write([]byte(`","checks":{`))
-
-	first := true
-	for name, result := range checks {
-		if !first {
-			w.Write([]byte(`,`))
-		}
-		w.Write([]byte(`"`))
-		w.Write([]byte(name))
-		w.Write([]byte(`":"`))
-		w.Write([]byte(result))
-		w.Write([]byte(`"`))
-		first = false
+	// Use proper JSON encoding for safety and correctness
+	response := map[string]interface{}{
+		"status": status,
+		"checks": checks,
 	}
-
-	w.Write([]byte(`}}`))
+	json.NewEncoder(w).Encode(response)
 }
 
 // Default global health checker

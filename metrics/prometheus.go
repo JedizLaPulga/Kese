@@ -9,19 +9,19 @@ import (
 
 // Metrics holds application metrics.
 type Metrics struct {
-	mu              sync.RWMutex
-	requestCount    map[string]int
-	requestDuration map[string][]time.Duration
-	activeRequests  int
-	totalRequests   int
-	totalErrors     int
+	mu                 sync.RWMutex
+	requestCount       map[string]int
+	requestDurationSum map[string]time.Duration // Changed from slice to sum for memory efficiency
+	activeRequests     int
+	totalRequests      int
+	totalErrors        int
 }
 
 // New creates a new metrics collector.
 func New() *Metrics {
 	return &Metrics{
-		requestCount:    make(map[string]int),
-		requestDuration: make(map[string][]time.Duration),
+		requestCount:       make(map[string]int),
+		requestDurationSum: make(map[string]time.Duration),
 	}
 }
 
@@ -32,7 +32,7 @@ func (m *Metrics) RecordRequest(method, path string, duration time.Duration, sta
 
 	key := method + " " + path
 	m.requestCount[key]++
-	m.requestDuration[key] = append(m.requestDuration[key], duration)
+	m.requestDurationSum[key] += duration // Add to sum instead of appending
 	m.totalRequests++
 
 	if statusCode >= 400 {
@@ -87,13 +87,9 @@ func (m *Metrics) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Average duration by route
 	fmt.Fprintf(w, "# HELP kese_request_duration_seconds Average request duration\n")
 	fmt.Fprintf(w, "# TYPE kese_request_duration_seconds summary\n")
-	for route, durations := range m.requestDuration {
-		if len(durations) > 0 {
-			var total time.Duration
-			for _, d := range durations {
-				total += d
-			}
-			avg := total / time.Duration(len(durations))
+	for route, sum := range m.requestDurationSum {
+		if count, exists := m.requestCount[route]; exists && count > 0 {
+			avg := sum / time.Duration(count)
 			fmt.Fprintf(w, "kese_request_duration_seconds{route=\"%s\"} %.6f\n",
 				route, avg.Seconds())
 		}
