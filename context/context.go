@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/JedizLaPulga/kese/router"
 	"github.com/JedizLaPulga/kese/sanitize"
 )
 
@@ -25,7 +26,7 @@ type Context struct {
 	Writer http.ResponseWriter
 
 	// params stores URL path parameters extracted by the router
-	params map[string]string
+	params router.Params
 
 	// statusCode tracks the HTTP status code that was set
 	statusCode int
@@ -41,32 +42,36 @@ type Context struct {
 
 	// values stores arbitrary key-value pairs for passing data between middleware and handlers
 	values map[string]interface{}
+
+	// MaxBodySize limits the size of the request body.
+	MaxBodySize int64
 }
 
 // New creates a new Context instance.
-func New(w http.ResponseWriter, r *http.Request) *Context {
+func New(w http.ResponseWriter, r *http.Request, maxBodySize int64) *Context {
 	return &Context{
-		Request:    r,
-		Writer:     w,
-		params:     make(map[string]string),
-		statusCode: http.StatusOK,
-		written:    false,
-		bodyBytes:  nil,
-		bodyRead:   false,
-		values:     make(map[string]interface{}),
+		Request:     r,
+		Writer:      w,
+		params:      nil,
+		statusCode:  http.StatusOK,
+		written:     false,
+		bodyBytes:   nil,
+		bodyRead:    false,
+		values:      make(map[string]interface{}),
+		MaxBodySize: maxBodySize,
 	}
 }
 
 // SetParams sets the route parameters for this context.
 // This is called by the router after matching a route.
-func (c *Context) SetParams(params map[string]string) {
+func (c *Context) SetParams(params router.Params) {
 	c.params = params
 }
 
 // Param returns the value of a URL path parameter.
 // For example, for the route "/users/:id", Param("id") returns the ID value.
 func (c *Context) Param(key string) string {
-	return c.params[key]
+	return c.params.Get(key)
 }
 
 // Query returns the value of a URL query parameter.
@@ -105,14 +110,14 @@ func (c *Context) Status(code int) {
 
 // Body parses the request body as JSON into the provided value.
 // The value should be a pointer to a struct.
-// Limited to 10MB to prevent memory exhaustion attacks.
+// Limited to MaxBodySize to prevent memory exhaustion attacks.
 // The body is buffered on first read, so this method can be called multiple times.
 func (c *Context) Body(v interface{}) error {
 	// Read and buffer the body if not already done
 	if !c.bodyRead {
 		defer c.Request.Body.Close()
-		// Limit to 10MB to prevent memory exhaustion
-		limitedReader := io.LimitReader(c.Request.Body, 10<<20) // 10 MB
+		// Limit to MaxBodySize to prevent memory exhaustion
+		limitedReader := io.LimitReader(c.Request.Body, c.MaxBodySize)
 		data, err := io.ReadAll(limitedReader)
 		if err != nil {
 			return err
@@ -126,14 +131,14 @@ func (c *Context) Body(v interface{}) error {
 }
 
 // BodyBytes reads the raw request body as bytes.
-// Limited to 10MB to prevent memory exhaustion attacks.
+// Limited to MaxBodySize to prevent memory exhaustion attacks.
 // The body is buffered on first read, so this method can be called multiple times.
 func (c *Context) BodyBytes() ([]byte, error) {
 	// Read and buffer the body if not already done
 	if !c.bodyRead {
 		defer c.Request.Body.Close()
-		// Limit to 10MB to prevent memory exhaustion
-		limitedReader := io.LimitReader(c.Request.Body, 10<<20) // 10 MB
+		// Limit to MaxBodySize to prevent memory exhaustion
+		limitedReader := io.LimitReader(c.Request.Body, c.MaxBodySize)
 		data, err := io.ReadAll(limitedReader)
 		if err != nil {
 			return nil, err
@@ -344,7 +349,7 @@ func (c *Context) PostFormValue(key string) string {
 // FormValues returns all values for the named form field.
 func (c *Context) FormValues(key string) []string {
 	c.Request.ParseForm()
-	c.Request.ParseMultipartForm(10 << 20) // 10 MB max
+	c.Request.ParseMultipartForm(c.MaxBodySize) // use configurable limit
 	if values, ok := c.Request.Form[key]; ok {
 		return values
 	}
@@ -354,7 +359,7 @@ func (c *Context) FormValues(key string) []string {
 // MultipartForm returns the multipart form data if the request is multipart/form-data.
 // This is useful for accessing multiple form fields and files.
 func (c *Context) MultipartForm() (*http.Request, error) {
-	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+	if err := c.Request.ParseMultipartForm(c.MaxBodySize); err != nil {
 		return nil, err
 	}
 	return c.Request, nil
