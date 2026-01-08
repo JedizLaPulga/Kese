@@ -15,8 +15,9 @@ type HandlerFunc func(*context.Context) error
 // App is the main application instance that holds the router and configuration.
 // It provides a high-level API for defining routes and middleware.
 type App struct {
-	router     *router.Router
-	middleware []MiddlewareFunc
+	router       *router.Router
+	middleware   []MiddlewareFunc
+	errorHandler ErrorHandler
 }
 
 // MiddlewareFunc defines the function signature for middleware.
@@ -27,8 +28,9 @@ type MiddlewareFunc func(HandlerFunc) HandlerFunc
 // This is the starting point for building your web application.
 func New() *App {
 	return &App{
-		router:     router.New(),
-		middleware: make([]MiddlewareFunc, 0),
+		router:       router.New(),
+		middleware:   make([]MiddlewareFunc, 0),
+		errorHandler: DefaultErrorHandler,
 	}
 }
 
@@ -36,6 +38,12 @@ func New() *App {
 // Middleware is executed in the order it is registered.
 func (a *App) Use(middleware ...MiddlewareFunc) {
 	a.middleware = append(a.middleware, middleware...)
+}
+
+// SetErrorHandler sets a custom error handler for the application.
+// The error handler receives errors from route handlers and returns appropriate responses.
+func (a *App) SetErrorHandler(handler ErrorHandler) {
+	a.errorHandler = handler
 }
 
 // GET registers a route that responds to GET requests.
@@ -91,6 +99,70 @@ func (a *App) wrapMiddleware(handler HandlerFunc) HandlerFunc {
 	return handler
 }
 
+// RouterGroup represents a group of routes with a common prefix and middleware.
+type RouterGroup struct {
+	app        *App
+	prefix     string
+	middleware []MiddlewareFunc
+}
+
+// Group creates a new router group with the given prefix and optional middleware.
+// Example: api := app.Group("/api/v1", authMiddleware())
+func (a *App) Group(prefix string, middleware ...MiddlewareFunc) *RouterGroup {
+	return &RouterGroup{
+		app:        a,
+		prefix:     prefix,
+		middleware: middleware,
+	}
+}
+
+// GET registers a GET route within the group.
+func (rg *RouterGroup) GET(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodGet, path, handler)
+}
+
+// POST registers a POST route within the group.
+func (rg *RouterGroup) POST(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodPost, path, handler)
+}
+
+// PUT registers a PUT route within the group.
+func (rg *RouterGroup) PUT(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodPut, path, handler)
+}
+
+// DELETE registers a DELETE route within the group.
+func (rg *RouterGroup) DELETE(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodDelete, path, handler)
+}
+
+// PATCH registers a PATCH route within the group.
+func (rg *RouterGroup) PATCH(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodPatch, path, handler)
+}
+
+// OPTIONS registers an OPTIONS route within the group.
+func (rg *RouterGroup) OPTIONS(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodOptions, path, handler)
+}
+
+// HEAD registers a HEAD route within the group.
+func (rg *RouterGroup) HEAD(path string, handler HandlerFunc) {
+	rg.addRoute(http.MethodHead, path, handler)
+}
+
+// addRoute adds a route to the app with the group's prefix and middleware.
+func (rg *RouterGroup) addRoute(method, path string, handler HandlerFunc) {
+	// Apply group's middleware to the handler
+	for i := len(rg.middleware) - 1; i >= 0; i-- {
+		handler = rg.middleware[i](handler)
+	}
+
+	// Add the route to the main app with the prefixed path
+	fullPath := rg.prefix + path
+	rg.app.addRoute(method, fullPath, handler)
+}
+
 // ServeHTTP implements http.Handler interface.
 // This allows the App to be used directly with http.Server.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -118,10 +190,11 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Execute the handler
 	if err := handler(ctx); err != nil {
-		// Handle errors returned by handlers
+		// Handle errors returned by handlers using the custom error handler
 		// Only write error response if no response has been written yet
 		if !ctx.IsWritten() {
-			ctx.String(http.StatusInternalServerError, fmt.Sprintf("Internal Server Error: %v", err))
+			statusCode, response := a.errorHandler(err)
+			ctx.JSON(statusCode, response)
 		}
 		// If response was already written, we can't send error info to client
 		// but we could log it here if needed

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 )
 
 // Context wraps http.Request and http.ResponseWriter to provide
@@ -34,6 +35,9 @@ type Context struct {
 
 	// bodyRead tracks whether the body has been read and buffered
 	bodyRead bool
+
+	// values stores arbitrary key-value pairs for passing data between middleware and handlers
+	values map[string]interface{}
 }
 
 // New creates a new Context instance.
@@ -46,6 +50,7 @@ func New(w http.ResponseWriter, r *http.Request) *Context {
 		written:    false,
 		bodyBytes:  nil,
 		bodyRead:   false,
+		values:     make(map[string]interface{}),
 	}
 }
 
@@ -247,4 +252,130 @@ func (c *Context) StatusCode() int {
 // This is used internally by static file serving and other methods that write directly.
 func (c *Context) SetWritten() {
 	c.written = true
+}
+
+// Set stores a key-value pair in the context.
+// This is useful for passing data between middleware and handlers.
+// Example: c.Set("user", authenticatedUser)
+func (c *Context) Set(key string, value interface{}) {
+	c.values[key] = value
+}
+
+// Get retrieves a value from the context by key.
+// Returns nil if the key doesn't exist.
+// Example: user := c.Get("user")
+func (c *Context) Get(key string) interface{} {
+	return c.values[key]
+}
+
+// MustGet retrieves a value from the context and panics if it doesn't exist.
+// Use this when you know the value must be present.
+// Example: user := c.MustGet("user").(User)
+func (c *Context) MustGet(key string) interface{} {
+	if value, exists := c.values[key]; exists {
+		return value
+	}
+	panic(fmt.Sprintf("key %q does not exist in context", key))
+}
+
+// Response helper methods for common HTTP status codes
+
+// Success sends a 200 OK JSON response with the provided data.
+func (c *Context) Success(data interface{}) error {
+	return c.JSON(http.StatusOK, data)
+}
+
+// Created sends a 201 Created JSON response with the provided resource.
+func (c *Context) Created(resource interface{}) error {
+	return c.JSON(http.StatusCreated, resource)
+}
+
+// BadRequest sends a 400 Bad Request JSON response with an error message.
+func (c *Context) BadRequest(message string) error {
+	return c.JSON(http.StatusBadRequest, map[string]string{"error": message})
+}
+
+// Unauthorized sends a 401 Unauthorized JSON response.
+func (c *Context) Unauthorized(message string) error {
+	return c.JSON(http.StatusUnauthorized, map[string]string{"error": message})
+}
+
+// Forbidden sends a 403 Forbidden JSON response.
+func (c *Context) Forbidden(message string) error {
+	return c.JSON(http.StatusForbidden, map[string]string{"error": message})
+}
+
+// NotFoundError sends a 404 Not Found JSON response with an error message.
+func (c *Context) NotFoundError(message string) error {
+	return c.JSON(http.StatusNotFound, map[string]string{"error": message})
+}
+
+// InternalError sends a 500 Internal Server Error JSON response.
+func (c *Context) InternalError(message string) error {
+	return c.JSON(http.StatusInternalServerError, map[string]string{"error": message})
+}
+
+// Form data parsing methods
+
+// FormValue returns the first value for the named form field from POST, PUT, or PATCH body.
+// It calls ParseForm and ParseMultipartForm if necessary.
+func (c *Context) FormValue(key string) string {
+	return c.Request.FormValue(key)
+}
+
+// PostFormValue returns the first value for the named form field from POST, PUT, or PATCH body only.
+// URL query parameters are ignored.
+func (c *Context) PostFormValue(key string) string {
+	return c.Request.PostFormValue(key)
+}
+
+// FormValues returns all values for the named form field.
+func (c *Context) FormValues(key string) []string {
+	c.Request.ParseForm()
+	c.Request.ParseMultipartForm(10 << 20) // 10 MB max
+	if values, ok := c.Request.Form[key]; ok {
+		return values
+	}
+	return []string{}
+}
+
+// MultipartForm returns the multipart form data if the request is multipart/form-data.
+// This is useful for accessing multiple form fields and files.
+func (c *Context) MultipartForm() (*http.Request, error) {
+	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+		return nil, err
+	}
+	return c.Request, nil
+}
+
+// File upload methods
+
+// FormFile returns the first file for the provided form key.
+// Returns the file, file header, and any error encountered.
+func (c *Context) FormFile(key string) (file io.ReadCloser, header *http.Request, err error) {
+	f, _, err := c.Request.FormFile(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Return the file and the whole request so caller can access h.Filename, h.Size, etc.
+	return f, c.Request, nil
+}
+
+// SaveUploadedFile saves an uploaded file to the specified destination path.
+// Example: c.SaveUploadedFile("avatar", "./uploads/avatar.png")
+func (c *Context) SaveUploadedFile(formKey, dst string) error {
+	file, _, err := c.Request.FormFile(formKey)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, file)
+	return err
 }
