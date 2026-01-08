@@ -15,9 +15,6 @@ type SecurityConfig struct {
 	// ContentTypeNosniff prevents MIME type sniffing. Default: "nosniff"
 	ContentTypeNosniff string
 
-	// XSSProtection enables browser XSS protection. Default: "1; mode=block"
-	XSSProtection string
-
 	// HSTSMaxAge is the max age for Strict-Transport-Security header in seconds.
 	// Set to 0 to disable HSTS. Default: 31536000 (1 year)
 	HSTSMaxAge int
@@ -37,7 +34,6 @@ func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		XFrameOptions:         "DENY",
 		ContentTypeNosniff:    "nosniff",
-		XSSProtection:         "1; mode=block",
 		HSTSMaxAge:            31536000, // 1 year
 		HSTSIncludeSubdomains: false,
 		ContentSecurityPolicy: "",
@@ -51,9 +47,11 @@ func DefaultSecurityConfig() SecurityConfig {
 // Headers added:
 //   - X-Frame-Options: DENY
 //   - X-Content-Type-Options: nosniff
-//   - X-XSS-Protection: 1; mode=block
 //   - Strict-Transport-Security: max-age=31536000
 //   - Referrer-Policy: strict-origin-when-cross-origin
+//
+// Note: X-XSS-Protection header is NOT included as it's deprecated
+// and can introduce vulnerabilities. Modern browsers ignore it.
 //
 // Example:
 //
@@ -82,11 +80,6 @@ func SecureHeadersWithConfig(config SecurityConfig) kese.MiddlewareFunc {
 			// X-Content-Type-Options: prevents MIME sniffing
 			if config.ContentTypeNosniff != "" {
 				c.SetHeader("X-Content-Type-Options", config.ContentTypeNosniff)
-			}
-
-			// X-XSS-Protection: enables browser XSS filtering
-			if config.XSSProtection != "" {
-				c.SetHeader("X-XSS-Protection", config.XSSProtection)
 			}
 
 			// Strict-Transport-Security: enforces HTTPS

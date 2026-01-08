@@ -2,7 +2,6 @@ package kese
 
 import (
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -45,15 +44,9 @@ func (a *App) Static(urlPrefix, fsPath string) {
 			return c.String(http.StatusForbidden, "Forbidden")
 		}
 
-		// Check if file exists
-		info, err := os.Stat(filePath)
-		if err != nil || info.IsDir() {
-			return c.String(http.StatusNotFound, "404 Not Found")
-		}
-
-		// Serve the file using http.ServeFile (handles MIME types, caching, etc.)
+		// Serve the file - http.ServeFile handles existence checks, MIME types, caching, etc.
 		http.ServeFile(c.Writer, c.Request, filePath)
-		c.SetWritten() // Mark as written since http.ServeFile wrote the response
+		c.SetWritten()
 		return nil
 	}
 
@@ -65,15 +58,9 @@ func (a *App) Static(urlPrefix, fsPath string) {
 // Example: app.StaticFile("/favicon.ico", "./assets/favicon.ico")
 func (a *App) StaticFile(urlPath, filePath string) {
 	handler := func(c *context.Context) error {
-		// Check if file exists
-		info, err := os.Stat(filePath)
-		if err != nil || info.IsDir() {
-			return c.String(http.StatusNotFound, "404 Not Found")
-		}
-
-		// Serve the file
+		// Serve the file - http.ServeFile handles existence checks, directories, etc.
 		http.ServeFile(c.Writer, c.Request, filePath)
-		c.SetWritten() // Mark as written since http.ServeFile wrote the response
+		c.SetWritten()
 		return nil
 	}
 
