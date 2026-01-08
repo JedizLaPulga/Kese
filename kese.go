@@ -55,18 +55,23 @@ func (a *App) SetErrorHandler(handler ErrorHandler) {
 // AddHealthCheck adds a named health check to the application.
 //
 // Example:
-//   app.AddHealthCheck("database", func() error {
-//       return db.Ping()
-//   })
 //
-//   app.GET("/health", app.HealthHandler())
+//	app.AddHealthCheck("database", func() error {
+//	    return db.Ping()
+//	})
+//
+//	app.GET("/health", app.HealthHandler())
 func (a *App) AddHealthCheck(name string, check health.CheckFunc) {
 	a.healthCheck.AddCheck(name, check)
 }
 
 // HealthHandler returns the health check HTTP handler.
-func (a *App) Health Handler() HandlerFunc {
-	return a.healthCheck.Handler()
+func (a *App) HealthHandler() HandlerFunc {
+	return func(c *context.Context) error {
+		a.healthCheck.ServeHTTP(c.Writer, c.Request)
+		c.SetWritten()
+		return nil
+	}
 }
 
 // GET registers a route that responds to GET requests.

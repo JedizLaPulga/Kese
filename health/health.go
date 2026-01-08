@@ -3,9 +3,6 @@ package health
 import (
 	"net/http"
 	"sync"
-
-	"github.com/JedizLaPulga/kese"
-	"github.com/JedizLaPulga/kese/context"
 )
 
 // CheckFunc is a function that performs a health check.
@@ -78,41 +75,37 @@ func (h *HealthChecker) Check() (Status, map[string]string) {
 	return StatusUnhealthy, results
 }
 
-// Handler returns an HTTP handler for health checks.
-//
-// Example:
-//
-//	app.GET("/health", healthChecker.Handler())
-func (h *HealthChecker) Handler() kese.HandlerFunc {
-	return func(c *context.Context) error {
-		status, checks := h.Check()
+// ServeHTTP implements http.Handler for the health checker.
+func (h *HealthChecker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	status, checks := h.Check()
 
-		response := map[string]interface{}{
-			"status": status,
-			"checks": checks,
-		}
-
-		statusCode := http.StatusOK
-		if status == StatusUnhealthy {
-			statusCode = http.StatusServiceUnavailable
-		}
-
-		return c.JSON(statusCode, response)
+	statusCode := http.StatusOK
+	if status == StatusUnhealthy {
+		statusCode = http.StatusServiceUnavailable
 	}
-}
 
-// LivenessHandler returns a simple liveness check (always returns 200).
-// Useful for Kubernetes liveness probes.
-func (h *HealthChecker) LivenessHandler() kese.HandlerFunc {
-	return func(c *context.Context) error {
-		return c.JSON(200, map[string]string{"status": "alive"})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	// Simple JSON response without importing encoding/json
+	w.Write([]byte(`{"status":"`))
+	w.Write([]byte(status))
+	w.Write([]byte(`","checks":{`))
+
+	first := true
+	for name, result := range checks {
+		if !first {
+			w.Write([]byte(`,`))
+		}
+		w.Write([]byte(`"`))
+		w.Write([]byte(name))
+		w.Write([]byte(`":"`))
+		w.Write([]byte(result))
+		w.Write([]byte(`"`))
+		first = false
 	}
-}
 
-// ReadinessHandler returns a readiness check (checks all health checks).
-// Useful for Kubernetes readiness probes.
-func (h *HealthChecker) ReadinessHandler() kese.HandlerFunc {
-	return h.Handler()
+	w.Write([]byte(`}}`))
 }
 
 // Default global health checker
@@ -121,9 +114,4 @@ var defaultChecker = New()
 // AddCheck adds a check to the default health checker.
 func AddCheck(name string, check CheckFunc) {
 	defaultChecker.AddCheck(name, check)
-}
-
-// Handler returns the default health check handler.
-func Handler() kese.HandlerFunc {
-	return defaultChecker.Handler()
 }
