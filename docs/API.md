@@ -83,6 +83,70 @@ err := app.Run(":8080")
 
 // HTTPS
 err := app.RunTLS(":443", "cert.pem", "key.pem")
+
+// With Graceful Shutdown (Tier 2)
+err := app.RunWithShutdown(":8080", 10*time.Second)
+```
+
+### Tier 2 Features
+
+#### Route Groups
+
+Organize routes with common prefixes and middleware:
+
+```go
+// Create a group with prefix
+api := app.Group("/api/v1")
+api.GET("/users", getUsers)       // Routes to /api/v1/users
+api.POST("/users", createUser)
+
+// Group with middleware
+admin := app.Group("/admin", authMiddleware(), adminMiddleware())
+admin.GET("/stats", getStats)
+```
+
+#### Health Checks
+
+Add health check endpoints:
+
+```go
+// Add health checks
+app.AddHealthCheck("database", func() error {
+    return db.Ping()
+})
+
+ app.AddHealthCheck("redis", func() error {
+    return redis.Ping()
+})
+
+// Expose health endpoint
+app.GET("/health", app.HealthHandler())
+```
+
+#### Custom Error Handlers
+
+Set custom error handling logic:
+
+```go
+app.SetErrorHandler(func(err error) (int, interface{}) {
+    if validationErr, ok := err.(*ValidationError); ok {
+        return 400, map[string]interface{}{
+            "error": "validation_failed",
+            "fields": validationErr.Errors,
+        }
+    }
+    return 500, map[string]string{"error": err.Error()}
+})
+```
+
+#### Structured Logging
+
+Access the built-in logger:
+
+```go
+app.Logger.Info("Server starting", "port", 8080)
+app.Logger.Error("Database error", "error", err)
+app.Logger.SetLevel(logger.DebugLevel)
 ```
 
 ---
@@ -225,6 +289,66 @@ c.Request  // *http.Request
 c.Writer   // http.ResponseWriter
 ```
 
+### Tier 2 Context Methods
+
+#### Response Helpers
+
+Convenient response methods:
+
+```go
+c.Success(data)                    // 200 OK
+c.Created(resource)                // 201 Created
+c.BadRequest("message")            // 400
+c.Unauthorized("message")          // 401
+c.Forbidden("message")             // 403
+c.NotFoundError("message")         // 404
+c.InternalError("message")         // 500
+```
+
+#### Context Value Storage
+
+Pass data between middleware and handlers:
+
+```go
+// Set values
+c.Set("user", authenticatedUser)
+c.Set("requestID", uuid.New())
+
+// Get values
+user := c.Get("user")              // Returns nil if not found
+id := c.MustGet("requestID")       // Panics if not found
+```
+
+#### Form Data & File Uploads
+
+```go
+// Form data
+email := c.FormValue("email")
+password := c.PostFormValue("password")
+tags := c.FormValues("tags")       // Multiple values
+
+// File uploads
+c.SaveUploadedFile("avatar", "./uploads/avatar.png")
+
+// Or manual handling
+file, req, err := c.FormFile("avatar")
+defer file.Close()
+```
+
+#### CSRF Token
+
+```go
+token := c.CSRFToken()  // Get CSRF token for forms
+```
+
+#### Input Sanitization
+
+```go
+safe := c.SanitizeHTML(userInput)
+valid := c.IsEmail(email)
+valid := c.IsURL(website)
+```
+
 ---
 
 ## Routing
@@ -351,6 +475,45 @@ func Auth() kese.MiddlewareFunc {
 // Use it
 app.Use(Auth())
 ```
+
+### Tier 2 Middleware
+
+#### Security
+
+```go
+// JWT Authentication
+app.Use(middleware.JWT("secret-key"))
+
+// CSRF Protection
+app.Use(middleware.CSRF())
+
+// Security Headers (XSS, clickjacking, HSTS)
+app.Use(middleware.SecureHeaders())
+
+// Rate Limiting
+app.Use(middleware.RateLimit(100, time.Minute))  // 100 req/min
+```
+
+#### Performance
+
+```go
+// Gzip Compression
+app.Use(middleware.Gzip())
+
+// Response Caching
+app.Use(middleware.Cache(5 * time.Minute))
+```
+
+#### Observability
+
+```go
+// Metrics Collection
+app.Use(middleware.Metrics())
+
+// Already covered: Logger, Recovery, RequestID
+```
+
+See [TIER2_FEATURES.md](./TIER2_FEATURES.md) for detailed configuration options.
 
 ---
 
