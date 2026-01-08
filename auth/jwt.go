@@ -127,14 +127,16 @@ func createSignature(message, secret string) string {
 }
 
 // RefreshToken creates a new token with the same claims but extended expiration.
+// The original token must still be valid (not expired) to be refreshed.
+// This prevents indefinite token refresh after expiration.
 //
 // Example:
 //
 //	newToken, err := auth.RefreshToken(oldToken, secret, 24*time.Hour)
 func RefreshToken(token, secret string, ttl time.Duration) (string, error) {
-	// Validate existing token
+	// Validate existing token - must not be expired
 	claims, err := ValidateToken(token, secret)
-	if err != nil && err != ErrTokenExpired {
+	if err != nil {
 		return "", err
 	}
 

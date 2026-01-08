@@ -1,6 +1,7 @@
 package kese
 
 import (
+	"bytes"
 	"html/template"
 	"path/filepath"
 	"sync"
@@ -39,6 +40,7 @@ func (te *TemplateEngine) LoadTemplates(pattern string) error {
 }
 
 // Render renders a template with the given data and writes it using the context.
+// The output is buffered to prevent partial rendering if an error occurs.
 func (te *TemplateEngine) Render(c *context.Context, status int, name string, data interface{}) error {
 	te.mu.RLock()
 	defer te.mu.RUnlock()
@@ -47,34 +49,18 @@ func (te *TemplateEngine) Render(c *context.Context, status int, name string, da
 		return c.InternalError("Templates not loaded")
 	}
 
-	c.SetHeader("Content-Type", "text/html; charset=utf-8")
-	c.Writer.WriteHeader(status)
-
-	err := te.templates.ExecuteTemplate(c.Writer, name, data)
+	// Buffer the template output
+	var buf bytes.Buffer
+	err := te.templates.ExecuteTemplate(&buf, name, data)
 	if err != nil {
+		// Template execution failed - return error without writing partial response
 		return err
 	}
 
+	// Template executed successfully - write the complete response
+	c.SetHeader("Content-Type", "text/html; charset=utf-8")
+	c.Writer.WriteHeader(status)
+	c.Writer.Write(buf.Bytes())
 	c.SetWritten()
 	return nil
-}
-
-// AddTemplate adds extra functionality to the App for template rendering
-type AppWithTemplates struct {
-	*App
-	templateEngine *TemplateEngine
-}
-
-// SetTemplateEngine sets the template engine for rendering HTML templates.
-func (a *App) SetTemplateEngine(engine *TemplateEngine) {
-	// Store engine as custom data in the app
-	// We'll use a simple approach: add a Render method to context through middleware
-}
-
-// RenderTemplate is a helper to render a template using the App's template engine.
-// This should be used after SetTemplateEngine has been called.
-func RenderTemplate(engine *TemplateEngine) func(*context.Context, int, string, interface{}) error {
-	return func(c *context.Context, status int, name string, data interface{}) error {
-		return engine.Render(c, status, name, data)
-	}
 }

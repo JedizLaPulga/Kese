@@ -17,11 +17,12 @@ type HandlerFunc func(*context.Context) error
 // App is the main application instance that holds the router and configuration.
 // It provides a high-level API for defining routes and middleware.
 type App struct {
-	router       *router.Router
-	middleware   []MiddlewareFunc
-	errorHandler ErrorHandler
-	healthCheck  *health.HealthChecker
-	Logger       *logger.Logger
+	router         *router.Router
+	middleware     []MiddlewareFunc
+	errorHandler   ErrorHandler
+	healthCheck    *health.HealthChecker
+	Logger         *logger.Logger
+	templateEngine *TemplateEngine
 }
 
 // MiddlewareFunc defines the function signature for middleware.
@@ -52,15 +53,34 @@ func (a *App) SetErrorHandler(handler ErrorHandler) {
 	a.errorHandler = handler
 }
 
-// AddHealthCheck adds a named health check to the application.
+// SetTemplateEngine sets the template engine for rendering HTML templates.
+// After calling this, use app.RenderTemplate() in handlers to render templates.
 //
 // Example:
 //
-//	app.AddHealthCheck("database", func() error {
-//	    return db.Ping()
-//	})
+//	engine := kese.NewTemplateEngine("./templates")
+//	engine.LoadTemplates("*.html")
+//	app.SetTemplateEngine(engine)
+func (a *App) SetTemplateEngine(engine *TemplateEngine) {
+	a.templateEngine = engine
+}
+
+// RenderTemplate renders an HTML template using the app's template engine.
+// The template engine must be set via SetTemplateEngine first.
 //
-//	app.GET("/health", app.HealthHandler())
+// Example:
+//
+//	func handler(c *context.Context) error {
+//	    data := map[string]interface{}{"Title": "Home"}
+//	    return app.RenderTemplate(c, 200, "home.html", data)
+//	}
+func (a *App) RenderTemplate(c *context.Context, status int, name string, data interface{}) error {
+	if a.templateEngine == nil {
+		return c.InternalError("Template engine not set. Call SetTemplateEngine first.")
+	}
+	return a.templateEngine.Render(c, status, name, data)
+}
+
 func (a *App) AddHealthCheck(name string, check health.CheckFunc) {
 	a.healthCheck.AddCheck(name, check)
 }

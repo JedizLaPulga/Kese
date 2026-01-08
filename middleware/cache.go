@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -9,6 +10,13 @@ import (
 	"github.com/JedizLaPulga/kese/cache"
 	"github.com/JedizLaPulga/kese/context"
 )
+
+// cachedResponse holds a complete HTTP response for caching
+type cachedResponse struct {
+	StatusCode int                 `json:"status_code"`
+	Headers    map[string][]string `json:"headers"`
+	Body       []byte              `json:"body"`
+}
 
 // CacheConfig holds configuration for cache middleware.
 type CacheConfig struct {
@@ -57,13 +65,25 @@ func CacheWithConfig(config CacheConfig) kese.MiddlewareFunc {
 
 			// Try to get from cache
 			if cached, found := config.Store.Get(key); found {
-				// Serve from cache
-				c.SetHeader("X-Cache", "HIT")
-				c.SetHeader("Content-Type", "application/json")
-				c.Writer.WriteHeader(http.StatusOK)
-				c.Writer.Write(cached)
-				c.SetWritten()
-				return nil
+				// Unmarshal cached response
+				var resp cachedResponse
+				if err := json.Unmarshal(cached, &resp); err == nil {
+					// Restore headers
+					for k, values := range resp.Headers {
+						for _, v := range values {
+							c.Writer.Header().Add(k, v)
+						}
+					}
+					// Add cache hit header
+					c.SetHeader("X-Cache", "HIT")
+
+					// Write status and body
+					c.Writer.WriteHeader(resp.StatusCode)
+					c.Writer.Write(resp.Body)
+					c.SetWritten()
+					return nil
+				}
+				// If unmarshal fails, continue to generate fresh response
 			}
 
 			// Capture response
@@ -79,7 +99,22 @@ func CacheWithConfig(config CacheConfig) kese.MiddlewareFunc {
 
 			// Cache the response if successful
 			if err == nil && recorder.statusCode >= 200 && recorder.statusCode < 300 {
-				config.Store.Set(key, recorder.body.Bytes(), config.TTL)
+				// Create cached response with full metadata
+				resp := cachedResponse{
+					StatusCode: recorder.statusCode,
+					Headers:    make(map[string][]string),
+					Body:       recorder.body.Bytes(),
+				}
+
+				// Copy headers
+				for k, v := range recorder.Header() {
+					resp.Headers[k] = v
+				}
+
+				// Marshal and store
+				if data, err := json.Marshal(resp); err == nil {
+					config.Store.Set(key, data, config.TTL)
+				}
 			}
 
 			// Set cache miss header
