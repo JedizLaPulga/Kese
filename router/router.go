@@ -2,6 +2,7 @@ package router
 
 import (
 	"strings"
+	"sync"
 )
 
 // Param is a single URL parameter, consisting of a key and a value.
@@ -24,6 +25,15 @@ func (ps Params) Get(name string) string {
 		}
 	}
 	return ""
+}
+
+// paramsPool is a pool of Params slices to reduce allocations during routing.
+// Pre-allocates capacity of 4 which covers most common use cases.
+var paramsPool = sync.Pool{
+	New: func() interface{} {
+		p := make(Params, 0, 4)
+		return &p
+	},
 }
 
 // Router is a generic radix tree router.
@@ -131,6 +141,7 @@ func (r *Router[T]) Add(method, path string, handler T) {
 // Match finds a handler that matches the given method and path.
 // It returns the handler and any extracted parameters.
 // The third return value indicates whether a match was found.
+// Uses a sync.Pool to reduce allocations for better performance.
 func (r *Router[T]) Match(method, path string) (T, Params, bool) {
 	var zero T
 	// Get the tree for this HTTP method
@@ -139,13 +150,20 @@ func (r *Router[T]) Match(method, path string) (T, Params, bool) {
 		return zero, nil, false
 	}
 
-	params := make(Params, 0) // TODO: Optimize this with a sync.Pool if needed later
+	// Get params from pool and reset it
+	paramsPtr := paramsPool.Get().(*Params)
+	params := (*paramsPtr)[:0] // Reset length, keep capacity
 
 	// Handle root path
 	if path == "/" {
 		if root.isLeaf {
-			return root.handler, params, true
+			// Copy params before returning to pool
+			result := make(Params, len(params))
+			copy(result, params)
+			paramsPool.Put(paramsPtr)
+			return root.handler, result, true
 		}
+		paramsPool.Put(paramsPtr)
 		return zero, nil, false
 	}
 
@@ -163,22 +181,26 @@ func (r *Router[T]) Match(method, path string) (T, Params, bool) {
 
 		// Try parameter match
 		if current.paramChild != nil {
-			// Check if isLeaf to ensure we don't match partial paths if we don't have to?
-			// Actually standard logic is greedy. match param.
 			params = append(params, Param{Key: current.paramChild.paramName, Value: segment})
 			current = current.paramChild
 			continue
 		}
 
 		// No match found
+		paramsPool.Put(paramsPtr)
 		return zero, nil, false
 	}
 
 	// Check if we're at a leaf node
 	if current.isLeaf {
-		return current.handler, params, true
+		// Copy params before returning to pool
+		result := make(Params, len(params))
+		copy(result, params)
+		paramsPool.Put(paramsPtr)
+		return current.handler, result, true
 	}
 
+	paramsPool.Put(paramsPtr)
 	return zero, nil, false
 }
 
