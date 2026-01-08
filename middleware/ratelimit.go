@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/JedizLaPulga/kese"
@@ -18,7 +19,7 @@ type RateLimitConfig struct {
 	Window time.Duration
 
 	// KeyFunc generates the rate limit key from the context.
-	// Default: uses client IP address
+	// Default: uses client IP address (RemoteAddr)
 	KeyFunc func(*context.Context) string
 
 	// Store is the storage backend for rate limiting.
@@ -32,6 +33,10 @@ type RateLimitConfig struct {
 	// Message is the error message returned when rate limit is exceeded.
 	// Default: "rate limit exceeded"
 	Message string
+
+	// ErrorHandler calls this function if the rate limit store fails.
+	// Default: log error to stderr
+	ErrorHandler func(error)
 }
 
 // DefaultRateLimitConfig returns the default rate limit configuration.
@@ -40,15 +45,15 @@ func DefaultRateLimitConfig(limit int, window time.Duration) RateLimitConfig {
 		Limit:  limit,
 		Window: window,
 		KeyFunc: func(c *context.Context) string {
-			// Use X-Forwarded-For if available, otherwise use RemoteAddr
-			if forwarded := c.Header("X-Forwarded-For"); forwarded != "" {
-				return forwarded
-			}
+			// SECURITY: Default to RemoteAddr to prevent spoofing via X-Forwarded-For
 			return c.Request.RemoteAddr
 		},
 		Store:    ratelimit.NewMemoryStore(),
 		SkipFunc: nil,
 		Message:  "rate limit exceeded",
+		ErrorHandler: func(err error) {
+			log.Printf("Rate limit error: %v", err)
+		},
 	}
 }
 
@@ -82,6 +87,13 @@ func RateLimit(limit int, window time.Duration) kese.MiddlewareFunc {
 //	    },
 //	}))
 func RateLimitWithConfig(config RateLimitConfig) kese.MiddlewareFunc {
+	// Ensure defaults
+	if config.ErrorHandler == nil {
+		config.ErrorHandler = func(err error) {
+			log.Printf("Rate limit error: %v", err)
+		}
+	}
+
 	return func(next kese.HandlerFunc) kese.HandlerFunc {
 		return func(c *context.Context) error {
 			// Check if we should skip rate limiting
@@ -96,7 +108,7 @@ func RateLimitWithConfig(config RateLimitConfig) kese.MiddlewareFunc {
 			count, err := config.Store.Increment(key, config.Window)
 			if err != nil {
 				// On error, allow the request but log it
-				fmt.Printf("Rate limit error: %v\n", err)
+				config.ErrorHandler(err)
 				return next(c)
 			}
 

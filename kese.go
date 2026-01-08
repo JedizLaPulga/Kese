@@ -17,12 +17,15 @@ type HandlerFunc func(*context.Context) error
 // App is the main application instance that holds the router and configuration.
 // It provides a high-level API for defining routes and middleware.
 type App struct {
-	router         *router.Router
+	router         *router.Router[HandlerFunc]
 	middleware     []MiddlewareFunc
 	errorHandler   ErrorHandler
 	healthCheck    *health.HealthChecker
 	Logger         *logger.Logger
 	templateEngine *TemplateEngine
+
+	// MaxBodySize limits the size of the request body (default: 10MB)
+	MaxBodySize int64
 }
 
 // MiddlewareFunc defines the function signature for middleware.
@@ -33,11 +36,12 @@ type MiddlewareFunc func(HandlerFunc) HandlerFunc
 // This is the starting point for building your web application.
 func New() *App {
 	return &App{
-		router:       router.New(),
+		router:       router.New[HandlerFunc](),
 		middleware:   make([]MiddlewareFunc, 0),
 		errorHandler: DefaultErrorHandler,
 		healthCheck:  health.New(),
 		Logger:       logger.New(),
+		MaxBodySize:  10 << 20, // 10MB Default
 	}
 }
 
@@ -215,21 +219,14 @@ func (rg *RouterGroup) addRoute(method, path string, handler HandlerFunc) {
 // This allows the App to be used directly with http.Server.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Create a new context for this request
-	ctx := context.New(w, r)
+	// Use configured MaxBodySize
+	ctx := context.New(w, r, a.MaxBodySize)
 
 	// Find the matching route
-	handlerInterface, params := a.router.Match(r.Method, r.URL.Path)
-	if handlerInterface == nil {
+	handler, params, found := a.router.Match(r.Method, r.URL.Path)
+	if !found {
 		// No route matched - return 404
 		ctx.String(http.StatusNotFound, "404 Not Found")
-		return
-	}
-
-	// Type assert the handler from interface{} to HandlerFunc
-	handler, ok := handlerInterface.(HandlerFunc)
-	if !ok {
-		// This should never happen if we're using the framework correctly
-		ctx.String(http.StatusInternalServerError, "Internal Error: invalid handler type")
 		return
 	}
 
@@ -243,9 +240,11 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !ctx.IsWritten() {
 			statusCode, response := a.errorHandler(err)
 			ctx.JSON(statusCode, response)
+		} else {
+			// If response was already written, we can't send error info to client
+			// But we should log it
+			a.Logger.Error(fmt.Sprintf("Handler error after write: %v", err))
 		}
-		// If response was already written, we can't send error info to client
-		// but we could log it here if needed
 	}
 
 }
@@ -253,12 +252,12 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Run starts the HTTP server on the specified address.
 // address should be in the format ":8080" or "localhost:8080"
 func (a *App) Run(address string) error {
-	fmt.Printf("🚀 Kese server starting on %s\n", address)
+	a.Logger.Info(fmt.Sprintf("🚀 Kese server starting on %s", address))
 	return http.ListenAndServe(address, a)
 }
 
 // RunTLS starts the HTTPS server on the specified address with TLS config.
 func (a *App) RunTLS(address, certFile, keyFile string) error {
-	fmt.Printf("🔒 Kese server starting on %s (TLS)\n", address)
+	a.Logger.Info(fmt.Sprintf("🔒 Kese server starting on %s (TLS)", address))
 	return http.ListenAndServeTLS(address, certFile, keyFile, a)
 }

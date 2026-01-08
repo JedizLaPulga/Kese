@@ -6,13 +6,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/JedizLaPulga/kese/router"
 )
+
+const defaultLimit = 10 << 20
 
 func TestNew(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 	if ctx == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -22,8 +26,11 @@ func TestNew(t *testing.T) {
 	if ctx.Writer != w {
 		t.Error("Context.Writer not set correctly")
 	}
-	if ctx.params == nil {
-		t.Error("Context.params not initialized")
+	if ctx.params != nil {
+		t.Error("Context.params should be nil initially")
+	}
+	if ctx.MaxBodySize != defaultLimit {
+		t.Errorf("MaxBodySize not set correctly, got %d", ctx.MaxBodySize)
 	}
 }
 
@@ -31,8 +38,11 @@ func TestParam(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/users/123", nil)
 
-	ctx := New(w, r)
-	ctx.SetParams(map[string]string{"id": "123", "name": "john"})
+	ctx := New(w, r, defaultLimit)
+	ctx.SetParams(router.Params{
+		{Key: "id", Value: "123"},
+		{Key: "name", Value: "john"},
+	})
 
 	if ctx.Param("id") != "123" {
 		t.Errorf("Expected id=123, got %s", ctx.Param("id"))
@@ -49,7 +59,7 @@ func TestQuery(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/search?q=golang&page=2", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	if ctx.Query("q") != "golang" {
 		t.Errorf("Expected q=golang, got %s", ctx.Query("q"))
@@ -66,7 +76,7 @@ func TestQueryDefault(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/search?q=golang", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	if ctx.QueryDefault("q", "default") != "golang" {
 		t.Error("Should return actual value when present")
@@ -82,7 +92,7 @@ func TestHeader(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer token123")
 	r.Header.Set("Content-Type", "application/json")
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	if ctx.Header("Authorization") != "Bearer token123" {
 		t.Error("Failed to get Authorization header")
@@ -96,7 +106,7 @@ func TestSetHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 	ctx.SetHeader("X-Custom-Header", "test-value")
 
 	if w.Header().Get("X-Custom-Header") != "test-value" {
@@ -108,7 +118,7 @@ func TestStatus(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 	ctx.Status(http.StatusCreated)
 
 	// Status() is now lazy - it doesn't write headers immediately
@@ -142,7 +152,7 @@ func TestBody(t *testing.T) {
 	r := httptest.NewRequest("POST", "/users", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/json")
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	var user User
 	err := ctx.Body(&user)
@@ -163,7 +173,7 @@ func TestBodyBytes(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	data, err := ctx.BodyBytes()
 	if err != nil {
@@ -179,7 +189,7 @@ func TestJSON(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	data := map[string]interface{}{
 		"message": "Hello",
@@ -218,7 +228,7 @@ func TestString(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	err := ctx.String(http.StatusOK, "Hello, World!")
 	if err != nil {
@@ -237,7 +247,7 @@ func TestHTML(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	html := "<h1>Hello</h1>"
 	err := ctx.HTML(http.StatusOK, html)
@@ -257,7 +267,7 @@ func TestBytes(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	data := []byte{0x48, 0x65, 0x6c, 0x6c, 0x6f} // "Hello"
 	err := ctx.Bytes(http.StatusOK, "application/octet-stream", data)
@@ -277,7 +287,7 @@ func TestNoContent(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("DELETE", "/users/123", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	err := ctx.NoContent()
 	if err != nil {
@@ -296,7 +306,7 @@ func TestRedirect(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/old", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	err := ctx.Redirect(http.StatusMovedPermanently, "/new")
 	if err != nil {
@@ -315,7 +325,7 @@ func TestRedirectInvalidStatus(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/old", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	err := ctx.Redirect(http.StatusOK, "/new")
 	if err == nil {
@@ -328,7 +338,7 @@ func TestCookie(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.AddCookie(&http.Cookie{Name: "session", Value: "abc123"})
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	cookie, err := ctx.Cookie("session")
 	if err != nil {
@@ -343,7 +353,7 @@ func TestSetCookie(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	cookie := &http.Cookie{
 		Name:  "token",
@@ -368,7 +378,7 @@ func TestMethod(t *testing.T) {
 	for _, method := range tests {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(method, "/", nil)
-		ctx := New(w, r)
+		ctx := New(w, r, defaultLimit)
 
 		if ctx.Method() != method {
 			t.Errorf("Expected method %s, got %s", method, ctx.Method())
@@ -382,7 +392,7 @@ func TestPath(t *testing.T) {
 	for _, path := range paths {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", path, nil)
-		ctx := New(w, r)
+		ctx := New(w, r, defaultLimit)
 
 		if ctx.Path() != path {
 			t.Errorf("Expected path %s, got %s", path, ctx.Path())
@@ -394,7 +404,7 @@ func TestIsWritten(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultLimit)
 
 	if ctx.IsWritten() {
 		t.Error("IsWritten should be false initially")

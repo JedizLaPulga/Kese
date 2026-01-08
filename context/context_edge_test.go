@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+const defaultTestLimit = 10 << 20
+
 // TestBodyMultipleReads verifies that Body() can be called multiple times
 func TestBodyMultipleReads(t *testing.T) {
 	type User struct {
@@ -18,7 +20,7 @@ func TestBodyMultipleReads(t *testing.T) {
 	r := httptest.NewRequest("POST", "/users", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/json")
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultTestLimit)
 
 	// First read
 	var user1 User
@@ -50,7 +52,7 @@ func TestBodyBytesMultipleReads(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultTestLimit)
 
 	// First read
 	data1, err := ctx.BodyBytes()
@@ -84,7 +86,7 @@ func TestBodyAndBodyBytesMixed(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/users", bytes.NewBufferString(body))
 
-	ctx := New(w, r)
+	ctx := New(w, r, defaultTestLimit)
 
 	// First read with BodyBytes
 	data, err := ctx.BodyBytes()
@@ -114,7 +116,7 @@ func TestQueryDefaultWithEmptyValue(t *testing.T) {
 
 	// Test with empty value: ?q=
 	r1 := httptest.NewRequest("GET", "/search?q=", nil)
-	ctx1 := New(w, r1)
+	ctx1 := New(w, r1, defaultTestLimit)
 
 	result1 := ctx1.QueryDefault("q", "default")
 	if result1 != "" {
@@ -123,7 +125,7 @@ func TestQueryDefaultWithEmptyValue(t *testing.T) {
 
 	// Test with missing parameter
 	r2 := httptest.NewRequest("GET", "/search", nil)
-	ctx2 := New(w, r2)
+	ctx2 := New(w, r2, defaultTestLimit)
 
 	result2 := ctx2.QueryDefault("q", "default")
 	if result2 != "default" {
@@ -132,7 +134,7 @@ func TestQueryDefaultWithEmptyValue(t *testing.T) {
 
 	// Test with actual value
 	r3 := httptest.NewRequest("GET", "/search?q=test", nil)
-	ctx3 := New(w, r3)
+	ctx3 := New(w, r3, defaultTestLimit)
 
 	result3 := ctx3.QueryDefault("q", "default")
 	if result3 != "test" {

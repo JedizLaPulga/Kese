@@ -31,7 +31,7 @@ func (a *App) RunWithShutdown(address string, timeout time.Duration) error {
 
 	// Start server in a goroutine
 	go func() {
-		fmt.Printf("🚀 Kese server starting on %s (with graceful shutdown)\n", address)
+		a.Logger.Info(fmt.Sprintf("🚀 Kese server starting on %s (with graceful shutdown)", address))
 		serverErrors <- server.ListenAndServe()
 	}()
 
@@ -45,7 +45,7 @@ func (a *App) RunWithShutdown(address string, timeout time.Duration) error {
 		return fmt.Errorf("server error: %w", err)
 
 	case sig := <-shutdown:
-		fmt.Printf("\n🛑 Received signal %v, starting graceful shutdown...\n", sig)
+		a.Logger.Info(fmt.Sprintf("🛑 Received signal %v, starting graceful shutdown...", sig))
 
 		// Create context with timeout for shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -58,7 +58,7 @@ func (a *App) RunWithShutdown(address string, timeout time.Duration) error {
 			return fmt.Errorf("failed to gracefully shutdown server: %w", err)
 		}
 
-		fmt.Println("✅ Server stopped gracefully")
+		a.Logger.Info("✅ Server stopped gracefully")
 		return nil
 	}
 }
