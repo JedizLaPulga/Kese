@@ -117,8 +117,9 @@ func (c *Context) Body(v interface{}) error {
 	if !c.bodyRead {
 		defer c.Request.Body.Close()
 		// Limit to MaxBodySize to prevent memory exhaustion
-		limitedReader := io.LimitReader(c.Request.Body, c.MaxBodySize)
-		data, err := io.ReadAll(limitedReader)
+		// http.MaxBytesReader returns an error if the body exceeds the limit
+		maxBytesReader := http.MaxBytesReader(c.Writer, c.Request.Body, c.MaxBodySize)
+		data, err := io.ReadAll(maxBytesReader)
 		if err != nil {
 			return err
 		}
@@ -138,8 +139,9 @@ func (c *Context) BodyBytes() ([]byte, error) {
 	if !c.bodyRead {
 		defer c.Request.Body.Close()
 		// Limit to MaxBodySize to prevent memory exhaustion
-		limitedReader := io.LimitReader(c.Request.Body, c.MaxBodySize)
-		data, err := io.ReadAll(limitedReader)
+		// http.MaxBytesReader returns an error if the body exceeds the limit
+		maxBytesReader := http.MaxBytesReader(c.Writer, c.Request.Body, c.MaxBodySize)
+		data, err := io.ReadAll(maxBytesReader)
 		if err != nil {
 			return nil, err
 		}

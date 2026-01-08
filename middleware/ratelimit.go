@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	"github.com/JedizLaPulga/kese"
@@ -46,7 +47,13 @@ func DefaultRateLimitConfig(limit int, window time.Duration) RateLimitConfig {
 		Window: window,
 		KeyFunc: func(c *context.Context) string {
 			// SECURITY: Default to RemoteAddr to prevent spoofing via X-Forwarded-For
-			return c.Request.RemoteAddr
+			// We strip the port number to group connections from the same IP
+			host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+			if err != nil {
+				// If parsing fails (e.g. no port), return as is
+				return c.Request.RemoteAddr
+			}
+			return host
 		},
 		Store:    ratelimit.NewMemoryStore(),
 		SkipFunc: nil,
