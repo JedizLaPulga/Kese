@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,16 +11,16 @@ import (
 
 	"github.com/JedizLaPulga/kese"
 	"github.com/JedizLaPulga/kese/context"
+	"github.com/JedizLaPulga/kese/logger"
 )
 
 func TestLogger(t *testing.T) {
-	// Capture log output
+	// Capture structured log output
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	log := logger.NewWithConfig(logger.InfoLevel, &buf)
 
 	app := kese.New()
-	app.Use(Logger())
+	app.Use(Logger(log))
 
 	app.GET("/test", func(c *context.Context) error {
 		return c.String(200, "OK")
@@ -34,7 +33,7 @@ func TestLogger(t *testing.T) {
 
 	logOutput := buf.String()
 
-	// Check that log contains method, path, and status
+	// Check that log contains method, path, and status in JSON format
 	if !strings.Contains(logOutput, "GET") {
 		t.Error("Log should contain HTTP method")
 	}
@@ -47,13 +46,12 @@ func TestLogger(t *testing.T) {
 }
 
 func TestRecovery(t *testing.T) {
-	// Capture log output
+	// Capture structured log output
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	log := logger.NewWithConfig(logger.InfoLevel, &buf)
 
 	app := kese.New()
-	app.Use(Recovery())
+	app.Use(Recovery(log))
 
 	app.GET("/panic", func(c *context.Context) error {
 		panic("test panic")
@@ -80,10 +78,10 @@ func TestRecovery(t *testing.T) {
 		t.Error("Response should contain error message")
 	}
 
-	// Log should contain panic info
+	// Log should contain panic info in JSON format
 	logOutput := buf.String()
-	if !strings.Contains(logOutput, "PANIC") {
-		t.Error("Log should contain PANIC message")
+	if !strings.Contains(logOutput, "Panic recovered") || !strings.Contains(logOutput, "ERROR") {
+		t.Error("Log should contain panic error")
 	}
 	if !strings.Contains(logOutput, "test panic") {
 		t.Error("Log should contain panic message")
@@ -92,7 +90,7 @@ func TestRecovery(t *testing.T) {
 
 func TestRecoveryDoesNotAffectNormalRequests(t *testing.T) {
 	app := kese.New()
-	app.Use(Recovery())
+	app.Use(Recovery(app.Logger))
 
 	app.GET("/normal", func(c *context.Context) error {
 		return c.String(200, "OK")
@@ -178,7 +176,9 @@ func TestCORSWithConfig(t *testing.T) {
 		return c.String(200, "OK")
 	})
 
+	// Add Origin header to match allowed origin
 	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Origin", "https://example.com")
 	w := httptest.NewRecorder()
 
 	app.ServeHTTP(w, req)
@@ -186,6 +186,11 @@ func TestCORSWithConfig(t *testing.T) {
 	// Check custom origin
 	if w.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
 		t.Errorf("Expected origin https://example.com, got %s", w.Header().Get("Access-Control-Allow-Origin"))
+	}
+
+	// Check credentials header is set
+	if w.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Error("Expected Access-Control-Allow-Credentials to be true")
 	}
 
 	// Check custom methods
@@ -298,16 +303,10 @@ func TestRequestIDConcurrent(t *testing.T) {
 }
 
 func TestMiddlewareChaining(t *testing.T) {
-	// Capture log output to avoid nil pointer issues
-	var buf bytes.Buffer
-	oldOutput := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(oldOutput)
-
 	app := kese.New()
 
 	// Chain multiple middleware
-	app.Use(Logger(), Recovery(), CORS(), RequestID())
+	app.Use(Logger(app.Logger), Recovery(app.Logger), CORS(), RequestID())
 
 	app.GET("/test", func(c *context.Context) error {
 		return c.JSON(200, map[string]string{"status": "ok"})

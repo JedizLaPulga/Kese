@@ -1,6 +1,7 @@
 package context
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,6 +44,9 @@ type Context struct {
 	// values stores arbitrary key-value pairs for passing data between middleware and handlers
 	values map[string]interface{}
 
+	// ctx is the request context for cancellation and deadline handling
+	ctx context.Context
+
 	// MaxBodySize limits the size of the request body.
 	MaxBodySize int64
 }
@@ -58,6 +62,7 @@ func New(w http.ResponseWriter, r *http.Request, maxBodySize int64) *Context {
 		bodyBytes:   nil,
 		bodyRead:    false,
 		values:      make(map[string]interface{}),
+		ctx:         r.Context(),
 		MaxBodySize: maxBodySize,
 	}
 }
@@ -262,6 +267,20 @@ func (c *Context) StatusCode() int {
 // This is used internally by static file serving and other methods that write directly.
 func (c *Context) SetWritten() {
 	c.written = true
+}
+
+// Context returns the request context for cancellation and deadline handling.
+// Handlers can use this to detect if the client has disconnected.
+// Example:
+//
+//	select {
+//	case <-c.Context().Done():
+//	    return c.Context().Err()
+//	case result := <-expensiveOperation():
+//	    return c.JSON(200, result)
+//	}
+func (c *Context) Context() context.Context {
+	return c.ctx
 }
 
 // CSRFToken returns the CSRF token from context.

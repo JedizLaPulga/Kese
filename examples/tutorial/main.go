@@ -15,8 +15,8 @@ func main() {
 	app := kese.New()
 
 	// Middleware
-	app.Use(middleware.Logger())
-	app.Use(middleware.Recovery())
+	app.Use(middleware.Logger(app.Logger))
+	app.Use(middleware.Recovery(app.Logger))
 	app.Use(middleware.CORS())
 	app.Use(middleware.RequestID())
 
