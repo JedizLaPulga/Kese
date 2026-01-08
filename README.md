@@ -31,9 +31,9 @@ Kese gives you enterprise features without the complexity. Zero dependencies, cl
 ### 🔐 Security & Auth
 - **JWT Authentication**: Token generation, validation, refresh
 - **CSRF Protection**: Cookie-based CSRF defense
-- **Security Headers**: XSS, clickjacking, HSTS protection  
+- **Security Headers**: Clickjacking, HSTS protection (X-XSS-Protection removed as deprecated)
 - **Rate Limiting**: Prevent API abuse with configurable limits
-- **Input Sanitization**: HTML, SQL, path sanitization helpers
+- **Input Sanitization**: HTML, path sanitization helpers
 
 ### ⚡ Performance
 - **Gzip Compression**: Automatic response compression

@@ -331,8 +331,15 @@ tags := c.FormValues("tags")       // Multiple values
 c.SaveUploadedFile("avatar", "./uploads/avatar.png")
 
 // Or manual handling
-file, req, err := c.FormFile("avatar")
+file, header, err := c.FormFile("avatar")  // Returns multipart.File, *multipart.FileHeader
+if err != nil {
+    return err
+}
 defer file.Close()
+
+// Access file metadata from header
+filename := header.Filename
+size := header.Size
 ```
 
 #### CSRF Token
@@ -487,7 +494,8 @@ app.Use(middleware.JWT("secret-key"))
 // CSRF Protection
 app.Use(middleware.CSRF())
 
-// Security Headers (XSS, clickjacking, HSTS)
+// Security Headers (clickjacking, HSTS)
+// Note: X-XSS-Protection removed as it's deprecated and ignored by modern browsers
 app.Use(middleware.SecureHeaders())
 
 // Rate Limiting

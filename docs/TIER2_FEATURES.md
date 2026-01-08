@@ -83,7 +83,8 @@ Add security headers automatically.
 ```go
 // Default security headers
 app.Use(middleware.SecureHeaders())
-// Adds: X-Frame-Options, X-Content-Type-Options, XSS-Protection, HSTS
+// Adds: X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy
+// Note: X-XSS-Protection is NOT included as it's deprecated by all modern browsers
 
 // Custom configuration
 app.Use(middleware.SecureHeadersWithConfig(middleware.SecurityConfig{
@@ -152,10 +153,11 @@ if !c.IsURL(website) {
 }
 
 // Other sanitizers
-sanitize.SQL(input)         // Escape SQL
 sanitize.Path(input)        // Prevent directory traversal
 sanitize.AlphaNumeric(input) // Remove special chars
 sanitize.StripTags(html)    // Remove HTML tags
+
+// Note: SQL sanitizer was removed - always use parameterized queries for SQL safety
 ```
 
 ---
@@ -410,16 +412,16 @@ func uploadHandler(c *context.Context) error {
 }
 
 // Or handle manually
-file, req, err := c.FormFile("avatar")
+file, header, err := c.FormFile("avatar")  // Returns multipart.File, *multipart.FileHeader
 if err != nil {
     return c.BadRequest("No file")
 }
-defer file.Close() // file is io.ReadCloser
+defer file.Close()
 
-// Access file info from header
-header, _ := req.FormFile("avatar")
+// Access file metadata from header
 filename := header.Filename
 size := header.Size
+mimeType := header.Header.Get("Content-Type")
 ```
 
 ---
@@ -538,7 +540,7 @@ func main() {
 |---------|---------|------------|-------------|
 | JWT Auth | `auth` | `middleware.JWT()` | Token-based authentication |
 | CSRF | - | `middleware.CSRF()` | Cross-site request forgery protection |
-| Security Headers | - | `middleware.SecureHeaders()` | XSS, clickjacking, HSTS |
+| Security Headers | - | `middleware.SecureHeaders()` | Clickjacking, HSTS (not XSS) |
 | Rate Limiting | `ratelimit` | `middleware.RateLimit()` | Request rate limiting |
 | Gzip | - | `middleware.Gzip()` | Response compression |
 | Caching | `cache` | `middleware.Cache()` | Response caching with TTL |
