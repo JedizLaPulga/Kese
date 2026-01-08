@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/JedizLaPulga/kese/context"
+	"github.com/JedizLaPulga/kese/health"
+	"github.com/JedizLaPulga/kese/logger"
 	"github.com/JedizLaPulga/kese/router"
 )
 
@@ -18,6 +20,8 @@ type App struct {
 	router       *router.Router
 	middleware   []MiddlewareFunc
 	errorHandler ErrorHandler
+	healthCheck  *health.HealthChecker
+	Logger       *logger.Logger
 }
 
 // MiddlewareFunc defines the function signature for middleware.
@@ -31,6 +35,8 @@ func New() *App {
 		router:       router.New(),
 		middleware:   make([]MiddlewareFunc, 0),
 		errorHandler: DefaultErrorHandler,
+		healthCheck:  health.New(),
+		Logger:       logger.New(),
 	}
 }
 
@@ -44,6 +50,23 @@ func (a *App) Use(middleware ...MiddlewareFunc) {
 // The error handler receives errors from route handlers and returns appropriate responses.
 func (a *App) SetErrorHandler(handler ErrorHandler) {
 	a.errorHandler = handler
+}
+
+// AddHealthCheck adds a named health check to the application.
+//
+// Example:
+//   app.AddHealthCheck("database", func() error {
+//       return db.Ping()
+//   })
+//
+//   app.GET("/health", app.HealthHandler())
+func (a *App) AddHealthCheck(name string, check health.CheckFunc) {
+	a.healthCheck.AddCheck(name, check)
+}
+
+// HealthHandler returns the health check HTTP handler.
+func (a *App) Health Handler() HandlerFunc {
+	return a.healthCheck.Handler()
 }
 
 // GET registers a route that responds to GET requests.
